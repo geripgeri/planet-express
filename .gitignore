@@ -42,6 +42,10 @@ terraform.rc
 # https://terragrunt.gruntwork.io/docs/features/caching/
 .terragrunt-cache
 
+# Ignore terragrunt-stack folder
+# https://docs.gruntwork.io/2.0/docs/pipelines/guides/stacks/#repository-structure
+.terragrunt-stack/
+
 # ---> Ansible
 *.retry
 
