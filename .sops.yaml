@@ -1,0 +1,9 @@
+creation_rules:
+  - path_regex: ansible/host_vars/.*\.ya?ml$
+    age: age1gknt3me3mvaz9n5zwd4vhpmp0qt2kcttws8jj653xfmyy64p3a0sn8eg4x
+  - path_regex: ansible/group_vars/.*\.ya?ml$
+    age: age1gknt3me3mvaz9n5zwd4vhpmp0qt2kcttws8jj653xfmyy64p3a0sn8eg4x
+  - path_regex: kubernetes/.*secret?s\.ya?ml$
+    age: age1gknt3me3mvaz9n5zwd4vhpmp0qt2kcttws8jj653xfmyy64p3a0sn8eg4x
+  - path_regex: infrastructure/.*secret?s\.ya?ml$
+    age: age1gknt3me3mvaz9n5zwd4vhpmp0qt2kcttws8jj653xfmyy64p3a0sn8eg4x
