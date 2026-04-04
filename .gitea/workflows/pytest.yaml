@@ -1,4 +1,4 @@
-name: Pytho CI
+name: Python CI
 
 on:
   push:
@@ -22,7 +22,6 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: '3.14'
-          cache: 'pip'
 
       - name: Install dependencies
         run: |
