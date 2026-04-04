@@ -1,0 +1,27 @@
+title = "Gitleaks — homelab public mirror"
+
+# Extend the built-in ruleset rather than replacing it.
+# Any rule not overridden here inherits default behaviour.
+[extend]
+useDefault = true
+
+[allowlist]
+  description = "Intentional high-entropy content that is safe to publish"
+
+  regexes = [
+    # SOPS-encrypted field values.
+    # Format: ENC[AES256_GCM,data:<b64>,iv:<b64>,tag:<b64>,type:<str>]
+    # This is ciphertext — the plaintext value is not present anywhere in the repo.
+    '''ENC\[AES256_GCM,data:[A-Za-z0-9+/=]+,iv:[A-Za-z0-9+/=]+,tag:[A-Za-z0-9+/=]+,type:\w+\]''',
+
+    # age-encrypted data encryption key stored in SOPS metadata.
+    # Appears as a PEM-style block — triggers generic "private key" rules.
+    # This is ciphertext encrypted to the age recipient; the actual DEK is not exposed.
+    '''-----BEGIN AGE ENCRYPTED FILE-----[\s\S]+?-----END AGE ENCRYPTED FILE-----''',
+  ]
+
+  paths = [
+    # .sops.yaml contains only age *public* key recipients — analogous to a GPG public key.
+    # There is no secret material here; publishing it is intentional and harmless.
+    '''\.sops\.yaml''',
+  ]

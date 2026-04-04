@@ -1,0 +1,23 @@
+name: Secret Scanning
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 4 * * *" # run once a day at 4 AM
+
+jobs:
+  gitleaks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        # Using the official Docker action allows the runner to handle Node.js steps
+        # while still using the specific Gitleaks environment for the scan.
+        uses: docker://zricethezav/gitleaks:latest
+        with:
+          args: detect --source=. --verbose --redact
