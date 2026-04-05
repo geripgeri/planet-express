@@ -46,7 +46,7 @@ repos:
   hooks:
     - id: link-adr
       name: Link ADR references
-      entry: python3 scripts/link_adr.py
+      entry: uv run scripts/link_adr.py
       language: system
       types: [markdown]
       files: \.md$

@@ -1,10 +1,19 @@
+[project]
+name = "planet-express"
+version = "0.1.0"
+description = "A production-grade homelab running Talos + K8s + ArgoCD, documented with ADRs. Delivering workloads since 2025."
+readme = "README.md"
+requires-python = ">=3.14"
+
+dependencies = [
+    "pytest>=9.0",
+    "pytest-cov>=7.1",
+]
+
 [tool.pytest.ini_options]
 pythonpath = ["."]
-minversion = "7.0"
+testpaths = ["tests"]
 addopts = "--cov=scripts --cov-report=term-missing --cov-branch"
-testpaths = [
-    "tests"
-]
 
 [tool.coverage.run]
 branch = true
@@ -12,4 +21,3 @@ source = ["scripts"]
 
 [tool.coverage.report]
 show_missing = true
-skip_covered = false
