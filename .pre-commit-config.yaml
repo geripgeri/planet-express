@@ -37,6 +37,7 @@ repos:
   rev: 1.0.0
   hooks:
   - id: mdformat
+    args: [--number]
     # Optionally add plugins
     additional_dependencies:
     - mdformat-gfm
