@@ -18,20 +18,28 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
         with:
-          python-version: '3.14'
+          version: "latest"
+          # Enable caching of the uv cache
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.14
+
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          if [ -f pyproject.toml ]; then
+            uv sync --all-extras --dev
+          elif [ -f requirements.txt ]; then
+            uv pip install -r requirements.txt
+          fi
 
       - name: Run tests with pytest
         run: |
-          # Generate both terminal and XML reports
-          pytest --cov=./ --cov-report=xml:coverage.xml --cov-report=term-missing
+          uv run pytest --cov=./ --cov-report=xml:coverage.xml --cov-report=term-missing
 
       - name: Pytest coverage comment
         if: github.event_name == 'pull_request'
