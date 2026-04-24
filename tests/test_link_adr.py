@@ -1,7 +1,7 @@
 import pathlib
 import pytest
 import sys
-from scripts.link_adr import main, build_adr_map, linkify_content
+from scripts.link_adr import main, build_adr_map, linkify_content, _relpath
 
 
 @pytest.fixture
@@ -47,12 +47,16 @@ def test_build_adr_map_regex_no_match(workspace):
     assert "ADR-X" not in mapping
 
 
-def test_linkify_logic():
+def test_linkify_logic(tmp_path):
     """
     Tests the core substitution logic, ensuring it handles edge cases like
     code blocks, existing links, and missing references.
+    Source is at the repo root so expected links are docs/decisions/…
     """
+    adr_dir = tmp_path / "docs" / "decisions"
+    adr_dir.mkdir(parents=True)
     mapping = {"ADR-001": "ADR-001.md"}
+    source = tmp_path / "README.md"
 
     cases = [
         # Standard replacement
@@ -68,12 +72,15 @@ def test_linkify_logic():
     ]
 
     for text_in, expected in cases:
-        assert linkify_content(text_in, mapping) == expected
+        assert linkify_content(text_in, mapping, source, adr_dir) == expected
 
 
-def test_linkify_with_parentheses():
+def test_linkify_with_parentheses(tmp_path):
     """Verify that ADR references inside parentheses are properly linked."""
+    adr_dir = tmp_path / "docs" / "decisions"
+    adr_dir.mkdir(parents=True)
     mapping = {"ADR-001": "ADR-001.md"}
+    source = tmp_path / "README.md"
 
     cases = [
         ("(see ADR-001)", "(see [ADR-001](docs/decisions/ADR-001.md))"),
@@ -83,7 +90,60 @@ def test_linkify_with_parentheses():
     ]
 
     for text_in, expected in cases:
-        assert linkify_content(text_in, mapping) == expected
+        assert linkify_content(text_in, mapping, source, adr_dir) == expected
+
+
+def test_linkify_from_adr_same_dir(tmp_path):
+    """
+    ADR inside docs/decisions/ referencing another ADR in the same directory.
+    Target IS relative to source.parent, so relative_to() is used (not _relpath).
+    Expected link is just the bare filename with no directory prefix.
+    """
+    adr_dir = tmp_path / "docs" / "decisions"
+    adr_dir.mkdir(parents=True)
+    mapping = {"ADR-001": "ADR-001-base.md"}
+    source = adr_dir / "ADR-002-something.md"
+
+    result = linkify_content("See ADR-001", mapping, source, adr_dir)
+    assert result == "See [ADR-001](ADR-001-base.md)"
+
+
+def test_linkify_from_sibling_dir(tmp_path):
+    """
+    File in a sibling directory (docs/other/) referencing an ADR in docs/decisions/.
+    Target is NOT relative to source.parent, so _relpath is called and produces
+    a ../ traversal to reach the decisions directory.
+    """
+    adr_dir = tmp_path / "docs" / "decisions"
+    adr_dir.mkdir(parents=True)
+    sibling = tmp_path / "docs" / "other"
+    sibling.mkdir()
+    mapping = {"ADR-001": "ADR-001-base.md"}
+    source = sibling / "guide.md"
+
+    result = linkify_content("See ADR-001", mapping, source, adr_dir)
+    assert result == "See [ADR-001](../decisions/ADR-001-base.md)"
+
+
+def test_relpath_direct():
+    """
+    Unit-tests _relpath directly for all common-prefix traversal cases,
+    including diverging siblings that exercise the loop break.
+    """
+    # Target directly inside anchor — no traversal needed
+    assert _relpath(pathlib.Path("/a/b/c/file.md"), pathlib.Path("/a/b/c")) == "file.md"
+
+    # Sibling directory — one level up then down (exercises the break in the loop)
+    assert (
+        _relpath(pathlib.Path("/a/b/c/file.md"), pathlib.Path("/a/b/other"))
+        == "../c/file.md"
+    )
+
+    # Deeper nesting — multiple levels up
+    assert (
+        _relpath(pathlib.Path("/a/b/c/file.md"), pathlib.Path("/a/x/y"))
+        == "../../b/c/file.md"
+    )
 
 
 def test_main_workflow(workspace, capsys):

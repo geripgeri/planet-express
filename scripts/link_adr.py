@@ -33,7 +33,12 @@ def build_adr_map(adr_dir: pathlib.Path, logger: Callable = print) -> Dict[str, 
     return mapping
 
 
-def linkify_content(content: str, mapping: Dict[str, str]) -> str:
+def linkify_content(
+    content: str,
+    mapping: Dict[str, str],
+    source_path: pathlib.Path,
+    adr_dir: pathlib.Path = ADR_DIR,
+) -> str:
     """
     Replaces ADR references with links, protecting code and existing links.
     Logic: Find 'skip' patterns or 'ADR' patterns. If it's a skip pattern, return as is.
@@ -41,6 +46,8 @@ def linkify_content(content: str, mapping: Dict[str, str]) -> str:
     If an ADR appears as the very first token on a top-level title line (i.e., the line
     starts with "# " followed immediately by "ADR-..."), do NOT convert it to a link.
     This preserves titles like "# ADR-001: Title" as plain text.
+
+    Links are relative to source_path so they resolve correctly from any directory.
     """
     combined_re = re.compile(f"({SKIP_RE.pattern})|({ADR_RE.pattern})", re.DOTALL)
 
@@ -60,20 +67,51 @@ def linkify_content(content: str, mapping: Dict[str, str]) -> str:
             return adr_id
 
         if adr_id in mapping:
-            return f"[{adr_id}](docs/decisions/{mapping[adr_id]})"
+            target = adr_dir / mapping[adr_id]
+            rel = (
+                pathlib.Path(target).relative_to(source_path.parent)
+                if target.is_relative_to(source_path.parent)
+                else pathlib.Path(_relpath(target, source_path.parent))
+            )
+            return f"[{adr_id}]({rel.as_posix()})"
 
         return adr_id
 
     return combined_re.sub(replace, content)
 
 
+def _relpath(target: pathlib.Path, anchor: pathlib.Path) -> str:
+    """Return a POSIX-style relative path from anchor directory to target."""
+    # Convert both to absolute paths based on CWD so the arithmetic is correct
+    # even when the script is run from an arbitrary working directory.
+    abs_target = target.resolve()
+    abs_anchor = anchor.resolve()
+    parts_target = abs_target.parts
+    parts_anchor = abs_anchor.parts
+
+    # Find common prefix length
+    common = 0
+    for a, b in zip(parts_target, parts_anchor):
+        if a == b:
+            common += 1
+        else:
+            break
+
+    up = len(parts_anchor) - common
+    down = parts_target[common:]
+    return "/".join([".."] * up + list(down))
+
+
 def process_file(
-    path: pathlib.Path, mapping: Dict[str, str], logger: Callable = print
+    path: pathlib.Path,
+    mapping: Dict[str, str],
+    adr_dir: pathlib.Path = ADR_DIR,
+    logger: Callable = print,
 ) -> bool:
     """Reads, transforms, and writes file if changes were made."""
     try:
         content = path.read_text(encoding="utf-8")
-        new_content = linkify_content(content, mapping)
+        new_content = linkify_content(content, mapping, path, adr_dir)
 
         if content != new_content:
             path.write_text(new_content, encoding="utf-8")
@@ -100,7 +138,7 @@ def main(
     changed_any = False
     for path in paths:
         if path.suffix.lower() == ".md":
-            if process_file(path, mapping, logger):
+            if process_file(path, mapping, adr_dir, logger):
                 changed_any = True
         else:
             logger(f"[DEBUG] Skipping non-markdown: {path}")
