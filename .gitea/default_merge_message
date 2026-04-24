@@ -1,0 +1,5 @@
+${PullRequestTitle}
+
+${PullRequestDescription}
+
+Closes: ${ClosingIssues}
