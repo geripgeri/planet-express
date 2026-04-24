@@ -3,6 +3,7 @@ import pytest
 import sys
 from scripts.link_adr import main, build_adr_map, linkify_content
 
+
 @pytest.fixture
 def workspace(tmp_path):
     """
@@ -18,6 +19,7 @@ def workspace(tmp_path):
 
     return tmp_path, adr_dir
 
+
 def test_build_adr_map(workspace):
     """Verifies that the ADR scanner correctly maps IDs to their filenames."""
     _, adr_dir = workspace
@@ -26,11 +28,13 @@ def test_build_adr_map(workspace):
     assert mapping["ADR-001"] == "ADR-001-base.md"
     assert mapping["ADR-H"] == "ADR-H-hard.md"
 
+
 def test_build_adr_map_dir_not_exists(tmp_path):
     """Ensures the scanner returns an empty mapping if the ADR directory is missing."""
     fake_dir = tmp_path / "not_here"
     mapping = build_adr_map(fake_dir, logger=lambda x: None)
     assert mapping == {}
+
 
 def test_build_adr_map_regex_no_match(workspace):
     """Ensures files that don't match the required ADR naming convention are ignored."""
@@ -41,6 +45,7 @@ def test_build_adr_map_regex_no_match(workspace):
 
     mapping = build_adr_map(adr_dir, logger=lambda x: None)
     assert "ADR-X" not in mapping
+
 
 def test_linkify_logic():
     """
@@ -65,6 +70,22 @@ def test_linkify_logic():
     for text_in, expected in cases:
         assert linkify_content(text_in, mapping) == expected
 
+
+def test_linkify_with_parentheses():
+    """Verify that ADR references inside parentheses are properly linked."""
+    mapping = {"ADR-001": "ADR-001.md"}
+
+    cases = [
+        ("(see ADR-001)", "(see [ADR-001](docs/decisions/ADR-001.md))"),
+        ("ADR-001.", "[ADR-001](docs/decisions/ADR-001.md)."),
+        ("ADR-001,", "[ADR-001](docs/decisions/ADR-001.md),"),
+        ("ADR-001:", "[ADR-001](docs/decisions/ADR-001.md):"),
+    ]
+
+    for text_in, expected in cases:
+        assert linkify_content(text_in, mapping) == expected
+
+
 def test_main_workflow(workspace, capsys):
     """Tests the full end-to-end execution on a file that needs updates."""
     root, adr_dir = workspace
@@ -77,6 +98,7 @@ def test_main_workflow(workspace, capsys):
     assert ret == 1
     assert "[ADR-001](docs/decisions/ADR-001-base.md)" in test_md.read_text()
 
+
 def test_main_no_mapping(tmp_path, capsys):
     """Ensures the script exits gracefully if no ADR files are found to link to."""
     empty_dir = tmp_path / "empty_docs"
@@ -88,6 +110,7 @@ def test_main_no_mapping(tmp_path, capsys):
     assert ret == 0
     assert "No ADRs found" in captured.out
 
+
 def test_main_no_changes(workspace):
     """Ensures the script returns 0 if a file is scanned but no links need updating."""
     root, adr_dir = workspace
@@ -96,6 +119,7 @@ def test_main_no_changes(workspace):
 
     ret = main(argv=[str(test_md)], adr_dir=adr_dir, logger=lambda x: None)
     assert ret == 0
+
 
 def test_non_markdown_skipped(workspace, capsys):
     """Checks that the script ignores files that do not have a .md extension."""
@@ -106,6 +130,7 @@ def test_non_markdown_skipped(workspace, capsys):
     main(argv=[str(test_txt)], adr_dir=adr_dir, logger=print)
     captured = capsys.readouterr()
     assert "Skipping non-markdown" in captured.out
+
 
 def test_unreadable_file(workspace, monkeypatch):
     """Ensures the script doesn't crash if it encounters a file it cannot read."""
@@ -120,7 +145,8 @@ def test_unreadable_file(workspace, monkeypatch):
     monkeypatch.setattr(pathlib.Path, "read_text", mock_read_error)
 
     ret = main(argv=[str(test_md)], adr_dir=adr_dir, logger=lambda x: None)
-    assert ret == 0 # Should fail silently or log and continue
+    assert ret == 0  # Should fail silently or log and continue
+
 
 def test_sys_argv_integration(workspace, monkeypatch):
     """Tests that the script correctly falls back to sys.argv when no arguments are passed."""
@@ -133,3 +159,23 @@ def test_sys_argv_integration(workspace, monkeypatch):
 
     ret = main(argv=None, adr_dir=adr_dir, logger=lambda x: None)
     assert ret == 1
+
+
+def test_title_line_adr_unlinked(workspace):
+    """
+    Verify that ADR references in Markdown title lines are NOT converted to links,
+    while the same ADR referenced elsewhere in the document IS converted.
+
+    This tests the special case where "# ADR-001: Title" should remain as plain text
+    to preserve readable document titles, while "Ref ADR-001" becomes a clickable link.
+    """
+    root, adr_dir = workspace
+    test_md = root / "title.md"
+    test_md.write_text("# ADR-001: Title\n\nRef ADR-001\n")
+
+    ret = main(argv=[str(test_md)], adr_dir=adr_dir, logger=lambda x: None)
+
+    assert ret == 1
+    out = test_md.read_text()
+    assert out.splitlines()[0].startswith("# ADR-001:")
+    assert "Ref [ADR-001](docs/decisions/ADR-001-base.md)" in out

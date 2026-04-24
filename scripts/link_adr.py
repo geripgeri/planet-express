@@ -2,6 +2,7 @@
 """
 Converts plain ADR references (e.g., ADR-001) into Markdown links.
 Skips references already inside links, backticks, or code blocks.
+Leaves ADR in the title line (e.g., "# ADR-001: ...") unlinked.
 """
 
 import pathlib
@@ -11,7 +12,7 @@ from typing import Dict, List, Optional, Callable
 
 ADR_DIR = pathlib.Path("docs/decisions")
 # Matches ADR-001 through ADR-999 or ADR-H
-ADR_RE = re.compile(r"\b(ADR-(?:\d{3}|H))\b")
+ADR_RE = re.compile(r"(?<!\w)(ADR-(?:\d{3}|H))(?!\w)")
 # Matches code blocks, inline code, or existing Markdown links
 SKIP_RE = re.compile(r"```.*?```|`[^`]*`|\[.*?\]\(.*?\)", re.DOTALL)
 
@@ -36,8 +37,11 @@ def linkify_content(content: str, mapping: Dict[str, str]) -> str:
     """
     Replaces ADR references with links, protecting code and existing links.
     Logic: Find 'skip' patterns or 'ADR' patterns. If it's a skip pattern, return as is.
+
+    If an ADR appears as the very first token on a top-level title line (i.e., the line
+    starts with "# " followed immediately by "ADR-..."), do NOT convert it to a link.
+    This preserves titles like "# ADR-001: Title" as plain text.
     """
-    # Combine patterns: Group 1 is stuff to skip, Group 2 is the ADR to link
     combined_re = re.compile(f"({SKIP_RE.pattern})|({ADR_RE.pattern})", re.DOTALL)
 
     def replace(match: re.Match) -> str:
@@ -47,6 +51,14 @@ def linkify_content(content: str, mapping: Dict[str, str]) -> str:
         if skipped_segment:
             return skipped_segment
 
+        # adr_id is guaranteed to be non-None here because the regex will always
+        # match one of the two groups when sub() calls this function
+        start_pos = match.start(2)
+        line_start = content.rfind("\n", 0, start_pos) + 1
+
+        if content.startswith("# ", line_start):
+            return adr_id
+
         if adr_id in mapping:
             return f"[{adr_id}](docs/decisions/{mapping[adr_id]})"
 
@@ -55,7 +67,9 @@ def linkify_content(content: str, mapping: Dict[str, str]) -> str:
     return combined_re.sub(replace, content)
 
 
-def process_file(path: pathlib.Path, mapping: Dict[str, str], logger: Callable = print) -> bool:
+def process_file(
+    path: pathlib.Path, mapping: Dict[str, str], logger: Callable = print
+) -> bool:
     """Reads, transforms, and writes file if changes were made."""
     try:
         content = path.read_text(encoding="utf-8")
@@ -71,7 +85,11 @@ def process_file(path: pathlib.Path, mapping: Dict[str, str], logger: Callable =
     return False
 
 
-def main(argv: Optional[List[str]] = None, adr_dir: pathlib.Path = ADR_DIR, logger: Callable = print) -> int:
+def main(
+    argv: Optional[List[str]] = None,
+    adr_dir: pathlib.Path = ADR_DIR,
+    logger: Callable = print,
+) -> int:
     paths = [pathlib.Path(f) for f in (argv if argv is not None else sys.argv[1:])]
     mapping = build_adr_map(adr_dir, logger)
 
