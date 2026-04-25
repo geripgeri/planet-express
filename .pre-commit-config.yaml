@@ -34,7 +34,7 @@ repos:
     # Security
     - id: detect-private-key
 - repo: https://github.com/gitleaks/gitleaks
-  rev: v8.24.2
+  rev: v8.30.0
   hooks:
     - id: gitleaks
 - repo: https://github.com/hukkin/mdformat
@@ -48,14 +48,14 @@ repos:
     - mdformat-black
 
 - repo: https://github.com/astral-sh/ruff-pre-commit
-  rev: v0.14.14
+  rev: v0.15.12
   hooks:
     - id: ruff-format
     - id: ruff
       args: [--fix, --exit-non-zero-on-fix]
 
 - repo: https://github.com/tofuutils/pre-commit-opentofu
-  rev: v2.2.2
+  rev: v2.3.0
   hooks:
     - id: tofu_fmt
     - id: terragrunt_fmt
