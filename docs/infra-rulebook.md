@@ -365,11 +365,11 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-**Rule SEC-04: Use X25519 age keys until Terragrunt bug #5759 is resolved; migrate to ML-KEM post-quantum keys after.** **Source:** ([ADR-009](decisions/ADR-009-sops.md)) **Rationale:** PQ keys are the intended end state; the interim classical keys must be rotated at migration time to close historical ciphertext exposure. **Implementation:**
+**Rule SEC-04: Use ML-KEM post-quantum age keys for all SOPS encryption.** **Source:** ([ADR-009](decisions/ADR-009-sops.md)) **Rationale:** The Terragrunt bug (#5759) that blocked PQ key support is resolved. ML-KEM keys are now the standard; X25519 keys are revoked. Historical commits contain X25519-wrapped ciphertexts, but credential rotation at migration time means any decrypted historical ciphertext yields a dead credential. **Implementation:**
 
-- Current state: standard X25519 age keys only
-- Migration trigger: resolution of https://github.com/gruntwork-io/terragrunt/issues/5759
-- Migration steps: generate PQ key pair → update `.sops.yaml` → `sops --rotate --in-place` all files → rotate all stored credentials → revoke old key
+- Generate keys with `age-keygen -pq`
+- Public keys reference `age1pq…` recipients in `.sops.yaml`
+- Private key stored in password manager; no X25519 fallback
 
 **Tags:** security, secrets
 

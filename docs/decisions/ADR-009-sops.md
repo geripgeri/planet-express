@@ -88,3 +88,22 @@ GPG was considered and rejected as an interim: keyring management overhead is no
 4. Rotate all stored API keys, tokens, and passwords
 5. Store the new private key in the password manager
 6. Revoke the old classical age key
+
+______________________________________________________________________
+
+### Amendment: April 2026 — Migrated to ML-KEM post-quantum age keys
+
+Terragrunt issue [#5759](https://github.com/gruntwork-io/terragrunt/issues/5759) has been resolved. The `sops_decrypt_file()` function now correctly handles the ML-KEM post-quantum recipient format.
+
+The migration steps documented in the March 2026 amendment have been completed:
+
+1. Generated a new ML-KEM age key pair (`age-keygen -pq`)
+2. Updated `.sops.yaml` with the new public key
+3. `sops --rotate --in-place` run against all encrypted files
+4. All stored API keys, tokens, and passwords rotated
+5. New private key stored in the password manager
+6. Old X25519 key revoked
+
+Historical commits retain X25519-wrapped ciphertexts. The credential rotation in step 4 closes that exposure: any historical ciphertext that a future adversary decrypts yields a dead credential.
+
+The interim classical key period is closed.
