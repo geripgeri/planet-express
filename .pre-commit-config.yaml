@@ -56,6 +56,14 @@ repos:
     - id: tofu_fmt
     - id: terragrunt_fmt
 
+- repo: https://github.com/compilerla/conventional-pre-commit
+  rev: v4.4.0
+  hooks:
+    - id: conventional-pre-commit
+      language: script
+      stages: [commit-msg]
+      args: []
+
 - repo: local
   hooks:
     - id: link-adr
