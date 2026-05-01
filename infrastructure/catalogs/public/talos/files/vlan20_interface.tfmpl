@@ -1,0 +1,18 @@
+machine:
+  network:
+    nameservers:
+%{ for ns in vlan10_nameservers ~}
+      - ${ns}
+%{ endfor ~}
+    interfaces:
+      - interface: ens18
+        dhcp: true
+        dhcpOptions:
+          routeMetric: 100
+        routes:
+          - network: 0.0.0.0/0
+            gateway: ${vlan10_gateway}
+            metric: 100
+      - interface: ens19
+        addresses:
+          - ${vlan20_ip}

@@ -1,0 +1,23 @@
+machine:
+  install:
+    image: ${initial_image}
+  features:
+    kubePrism:
+      enabled: true
+      port: 7445
+  kubelet:
+    extraMounts:
+      - destination: /var/mnt/longhorn
+        type: bind
+        source: /var/mnt/longhorn
+        options:
+          - bind
+          - rshared
+          - rw
+
+cluster:
+  network:
+    cni:
+      name: none
+  proxy:
+    disabled: true

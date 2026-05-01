@@ -1,0 +1,10 @@
+---
+apiVersion: v1alpha1
+kind: UserVolumeConfig
+name: longhorn # name is used to identify the volume /var/mnt/<name>
+provisioning:
+  diskSelector:
+    # !system_disk excludes the OS disk so Talos only targets the secondary data disk
+    match: "!system_disk && disk.size > uint(53687091200)"
+  grow: false
+  maxSize: ${longhorn_disk_size}
