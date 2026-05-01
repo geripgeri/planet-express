@@ -25,3 +25,34 @@ useDefault = true
     # There is no secret material here; publishing it is intentional and harmless.
     '''\.sops\.yaml''',
   ]
+
+# Rule 1: Block Private IPs (Internal Topology)
+# These reveal your internal network structure and should never be public.
+[[rules]]
+id = "private-ip"
+description = "Detect private IP addresses (RFC 1918) in Terraform and YAML config files"
+regex = '''\b(10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})\b'''
+path = '''\.(tf|hcl|tfvars|yml|yaml)$'''
+tags = ["infrastructure", "network", "privacy"]
+severity = "high"
+
+  [rules.allowlist]
+    description = "IP addresses in markdown are documentation examples, not live config"
+    paths = ['''\.md$''']
+
+# Rule 2: Block Public IPs (External Exposure)
+# These reveal external endpoints, potentially exposing attack surfaces.
+# Note: Go's RE2 engine does not support lookaheads, so this regex matches all
+# IPv4 addresses including RFC 1918 ranges. Private addresses will double-trigger
+# with Rule 1 — this is acceptable; Rule 1's "high" severity is the signal to triage on.
+[[rules]]
+id = "public-ip"
+description = "Detect public IP addresses in Terraform and YAML config files"
+regex = '''\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b'''
+path = '''\.(tf|hcl|tfvars|yml|yaml)$'''
+tags = ["infrastructure", "network", "exposure"]
+severity = "medium"
+
+  [rules.allowlist]
+    description = "IP addresses in markdown are documentation examples, not live config"
+    paths = ['''\.md$''']
