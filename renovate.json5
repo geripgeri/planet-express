@@ -1,0 +1,45 @@
+{
+  $schema: "https://docs.renovatebot.com/renovate-schema.json",
+  dependencyDashboard: true,
+
+  "extends": ["config:recommended"],
+  "timezone": "UTC",
+  "labels": ["renovate"],
+
+  "customManagers": [
+    // Custom regex-based manager(s) — used here to update the license year in a LICENSE file
+    // Regex used to capture the current year or year range from the file.
+    // Uses a named capture group "years" so it can be referenced in templates.
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^LICENSE$/"],
+      "matchStrings": [
+        "Copyright \\(c\\) (?<currentYear>\\d{4}(?:\\s*[-–—]\\s*\\d{4})?)"
+      ],
+      "datasourceTemplate": "regex",
+      "depNameTemplate": "license-year",
+      "versioningTemplate": "semver",
+      "currentValueTemplate": "{{currentYear}}"
+    }
+  ],
+  "packageRules": [
+    {"matchManagers": ["terraform"], "automerge": false, "prPriority": 5},
+    {"matchManagers": ["terragrunt"], "prPriority": 5, "automerge": false},
+    {
+      "matchManagers": ["pre-commit"],
+      "prPriority": 6,
+      "automerge": false,
+      "matchPackageNames": ["/^pre-commit/", "/.*-hook$/", "/.*hook-.*/"]
+    },
+    {"matchDatasources": ["pypi"], "minimumReleaseAge": "1 week"},
+    {"matchManagers": ["github-actions"], "prPriority": 5, "automerge": false},
+    {
+      "matchDepNames": ["license-year"],
+      "automerge": false,
+      "prPriority": 10,
+      "groupName": "chore: license year updates"
+    }
+  ],
+  "prHourlyLimit": 2,
+  "prConcurrentLimit": 5
+}
