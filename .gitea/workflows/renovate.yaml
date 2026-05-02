@@ -22,3 +22,6 @@ jobs:
           RENOVATE_ENDPOINT: ${{ github.server_url }}
           RENOVATE_REPOSITORIES: '["${{ github.repository }}"]'
           RENOVATE_LOG_LEVEL: info
+          # Fine-grained personal access token, read only access to all public repositories
+          # More: https://github.com/renovatebot/renovate/blob/main/docs/usage/getting-started/running.md#githubcom-token-for-changelogs-and-tools
+          RENOVATE_GITHUB_COM_TOKEN: ${{ secrets.RENOVATE_GITHUB_COM_TOKEN }}
