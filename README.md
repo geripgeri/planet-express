@@ -147,12 +147,12 @@ ______________________________________________________________________
 │       └── private/              # export-ignore
 │
 ├── ansible/                      # Proxmox host IaC / bootstrapping
-│   ├── playbooks/                # bootstrap.yml (apply), verify.yml (read-only CI checks)
+│   ├── playbooks/                # bootstrap.yaml (apply), verify.yaml (read-only CI checks)
 │   └── roles/
-│       ├── proxmox-base/         # Repos, packages, sysctl, SSH hardening
-│       ├── fan-control/          # Custom PWM fan curve
-│       ├── pve-exporter/         # Prometheus exporter for Proxmox metrics
-│       └── custom-scripts/
+│       ├── proxmox_base/         # Repos, packages, sysctl, SSH hardening
+│       ├── fan_control/          # Custom PWM fan curve
+│       ├── pve_exporter/         # Prometheus exporter for Proxmox metrics
+│       └── custom_scripts/
 │
 ├── docs/
 │   ├── decisions/                # Architecture Decision Records

@@ -1,0 +1,13 @@
+---
+# bootstrap.yaml — applies desired state to Proxmox host.
+# Idempotent: safe to run at any time.
+
+- name: Proxmox host baseline
+  hosts: proxmox
+  gather_facts: true
+
+  roles:
+    - role: proxmox_base
+      tags: [proxmox_base]
+    - role: fan_control
+      tags: [fan_control]

@@ -180,7 +180,7 @@ ______________________________________________________________________
 
 **Rule DEP-03: Keep Dependabot active on the public GitHub/Codeberg mirror.** **Source:** ([ADR-004](decisions/ADR-004-renovate.md)) **Rationale:** Dependabot provides passive CVE coverage via the GitHub Advisory Database with zero configuration overhead on public repos. **Implementation:**
 
-- No `dependabot.yml` configuration needed for public repos — GitHub enables it automatically
+- No `dependabot.yaml` configuration needed for public repos — GitHub enables it automatically
 - Dependabot and Renovate do not conflict: Renovate bumps proactively, Dependabot flags security issues reactively
 - Do not disable Dependabot on the mirror to "keep PRs clean"
 
@@ -605,9 +605,9 @@ ______________________________________________________________________
 
 **Rule CFG-01: All Proxmox host configuration changes go through `ansible/`, never direct SSH.** **Source:** ([ADR-016](decisions/ADR-016-ansible-for-proxmox-host-configuration.md)) **Rationale:** Ad-hoc SSH changes are untracked, non-idempotent, and not reproducible — the failure mode [ADR-000](decisions/ADR-000-project-goals.md) explicitly targets. **Implementation:**
 
-- Roles: `proxmox-base`, `fan-control`, `pve-exporter`, `custom-scripts`
-- Main playbook: `ansible/bootstrap.yml` — safe to re-run at any time
-- Verify playbook: `ansible/verify.yml` — checks state without changes; runs in CI on every PR touching `ansible/`
+- Roles: `proxmox_base`, `fan_control`, `pve_exporter`, `custom_scripts`
+- Main playbook: `ansible/bootstrap.yaml` — safe to re-run at any time
+- Verify playbook: `ansible/verify.yaml` — checks state without changes; runs in CI on every PR touching `ansible/`
 
 **Tags:** iac, configuration-management
 

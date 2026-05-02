@@ -1,0 +1,8 @@
+---
+# Reboot timeout: how long (seconds) to wait for the host to come back
+# after a kernel upgrade reboot. 600s is generous for a local host.
+proxmox_base_reboot_timeout: 600
+
+# How long to wait before attempting to reconnect after reboot (seconds).
+# Gives the host time to start shutting down before Ansible polls.
+proxmox_base_reboot_pre_delay: 15

@@ -1,0 +1,22 @@
+---
+# Upgrades all Proxmox packages using pveupgrade.
+#
+# pveupgrade is a thin wrapper around apt-get dist-upgrade that runs
+# Proxmox-specific pre-flight checks (e.g. subscription status, conflicting
+# packages) before proceeding. It is the recommended upgrade path for PVE hosts.
+#
+# Idempotency: ansible.builtin.apt reports changed=true only when packages
+# were actually upgraded. The reboot task downstream uses this to decide
+# whether to reboot.
+
+- name: Refresh apt cache
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 0  # always refresh — we're about to upgrade
+
+- name: Upgrade all packages (dist-upgrade)
+  ansible.builtin.apt:
+    upgrade: dist
+    autoremove: true
+    autoclean: true
+  register: proxmox_base_apt_upgrade

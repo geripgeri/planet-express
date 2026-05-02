@@ -1,0 +1,5 @@
+---
+# No handlers required for proxmox_base.
+# The reboot and fact refresh are driven directly from tasks/reboot.yml
+# because ordering guarantees matter — handlers run at the end of a play,
+# which would be too late for downstream roles to see the updated kernel.

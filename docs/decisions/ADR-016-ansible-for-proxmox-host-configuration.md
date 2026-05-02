@@ -43,7 +43,7 @@ The boundary is: Ansible owns the OS layer; OpenTofu owns the resource layer. Wh
 
 I will use [Ansible](https://www.ansible.com) to manage Proxmox host configuration.
 
-The implementation lives under `ansible/` with one role per concern: `proxmox-base`, `fan-control`, `pve-exporter`, `custom-scripts`. The main `bootstrap.yml` playbook calls all roles in order and is safe to re-run at any time. A companion `verify.yml` playbook checks desired state without making changes and runs in CI on every PR touching `ansible/`. Secrets in `ansible/host_vars/proxmox.yml` are encrypted with SOPS (see [ADR-009](ADR-009-sops.md)) and age, consistent with the rest of the repository.
+The implementation lives under `ansible/` with one role per concern: `proxmox_base`, `fan_control`, `pve_exporter`, `custom_scripts`. The main `bootstrap.yaml` playbook calls all roles in order and is safe to re-run at any time. A companion `verify.yaml` playbook checks desired state without making changes and runs in CI on every PR touching `ansible/`. Secrets in `ansible/host_vars/proxmox.yaml` are encrypted with SOPS (see [ADR-009](ADR-009-sops.md)) and age, consistent with the rest of the repository.
 
 ## Consequences
 
@@ -51,5 +51,5 @@ The implementation lives under `ansible/` with one role per concern: `proxmox-ba
 - Any change to host state goes through `ansible/` rather than directly via SSH
 - Fan control, pve-exporter, and host hardening are managed as code with the same discipline as the Kubernetes and OpenTofu layers
 - The OS/resource boundary between Ansible and OpenTofu must be respected as new host-level concerns are added; drift here creates confusion about which tool is authoritative
-- Host state that cannot be made safely idempotent is documented in `docs/runbooks/proxmox-rebuild.md` rather than forced into playbooks or silently omitted; together, the runbook and `bootstrap.yml` answer the question of what to do if the bare metal dies tonight
+- Host state that cannot be made safely idempotent is documented in `docs/runbooks/proxmox-rebuild.md` rather than forced into playbooks or silently omitted; together, the runbook and `bootstrap.yaml` answer the question of what to do if the bare metal dies tonight
 - Ansible does not reconstruct the Proxmox OS from scratch; a physical install from ISO is still required before Ansible's scope begins

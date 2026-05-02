@@ -1,0 +1,10 @@
+---
+# The actual /etc/fancontrol config is managed by the generate-fancontrol
+# script and service — see generate_fancontrol.yaml.
+# This task only ensures the daemon is installed and enabled.
+
+- name: Enable fancontrol service (start is handled by generate-fancontrol)
+  ansible.builtin.systemd:
+    name: "{{ fan_control_service }}"
+    enabled: true
+    daemon_reload: true

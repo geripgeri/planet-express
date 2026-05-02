@@ -1,0 +1,40 @@
+---
+# Deploys the generate-fancontrol script and its systemd service.
+#
+# The script resolves dynamic hwmon paths (which change across kernel versions),
+# writes a fresh /etc/fancontrol with the predetermined fan curve, then restarts
+# the fancontrol service.
+#
+# The service runs at boot (after the nct6687 module loads) so the fancontrol
+# config is always regenerated with current hardware IDs.
+#
+# Restarts are handler-driven: they only fire when the script or unit file
+# actually changes, keeping the play idempotent.
+- name: Deploy generate-fancontrol script
+  ansible.builtin.copy:
+    src: generate-fancontrol.sh
+    dest: "{{ fan_control_generate_script }}"
+    owner: root
+    group: root
+    mode: "0750"
+  notify:
+    - Restart generate-fancontrol
+    - Restart fancontrol
+
+- name: Deploy generate-fancontrol systemd unit
+  ansible.builtin.template:
+    src: generate-fancontrol.service.j2
+    dest: "/etc/systemd/system/{{ fan_control_generate_service }}.service"
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Restart generate-fancontrol
+    - Restart fancontrol
+
+- name: Enable generate-fancontrol service
+  ansible.builtin.systemd:
+    name: "{{ fan_control_generate_service }}"
+    enabled: true
+    daemon_reload: true
+    state: restarted

@@ -1,0 +1,15 @@
+[Unit]
+Description=Fan curve updater — resolves hwmon paths and writes /etc/fancontrol
+After=systemd-modules-load.service
+Before={{ fan_control_service }}.service
+Wants={{ fan_control_service }}.service
+
+[Service]
+Type=oneshot
+ExecStart={{ fan_control_generate_script }}
+RemainAfterExit=no
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

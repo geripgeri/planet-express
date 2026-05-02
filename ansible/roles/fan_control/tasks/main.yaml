@@ -1,0 +1,20 @@
+---
+- name: Install build dependencies
+  ansible.builtin.import_tasks: build_deps.yaml
+  tags: [fan_control, nct6687d, build]
+
+- name: Build and install nct6687d kernel driver
+  ansible.builtin.import_tasks: nct6687d.yaml
+  tags: [fan_control, nct6687d]
+
+- name: Run sensors-detect (first run only)
+  ansible.builtin.import_tasks: sensors_detect.yaml
+  tags: [fan_control, sensors]
+
+- name: Install and configure fancontrol
+  ansible.builtin.import_tasks: fancontrol.yaml
+  tags: [fan_control, fancontrol]
+
+- name: Deploy generate-fancontrol service
+  ansible.builtin.import_tasks: generate_fancontrol.yaml
+  tags: [fan_control, fancontrol]

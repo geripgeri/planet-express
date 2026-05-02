@@ -1,0 +1,28 @@
+---
+# sensors-detect probes hardware and writes /etc/modules for sensor drivers.
+# It is interactive by default; --auto accepts safe defaults non-interactively.
+#
+# We only run it once. A local fact file acts as the persistent marker.
+# To force a re-run: remove /etc/ansible/facts.d/sensors_detected.fact on the host.
+- name: Ensure lm-sensors is installed
+  ansible.builtin.apt:
+    name: "{{ fan_control_lm_sensors_packages }}"
+    state: present
+
+- name: Check whether sensors-detect has already run
+  ansible.builtin.stat:
+    path: "{{ fan_control_sensors_detect_fact_file }}"
+  register: fan_control_sensors_detect_marker
+
+- name: Run sensors-detect --auto (first run only)
+  ansible.builtin.command:
+    cmd: sensors-detect --auto
+  when: not fan_control_sensors_detect_marker.stat.exists
+  changed_when: true
+
+- name: Record that sensors-detect has run
+  ansible.builtin.copy:
+    content: "{{ {'run_at': ansible_facts['date_time'].iso8601} | to_json }}\n"
+    dest: "{{ fan_control_sensors_detect_fact_file }}"
+    mode: "0644"
+  when: not fan_control_sensors_detect_marker.stat.exists

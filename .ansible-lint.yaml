@@ -1,0 +1,5 @@
+---
+# .ansible-lint
+
+exclude_paths:
+  - inventory/host_vars/zoidberg/vault.sops.yaml

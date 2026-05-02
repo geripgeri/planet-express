@@ -1,0 +1,105 @@
+---
+# Builds and installs the nct6687d out-of-tree kernel module.
+# Upstream: https://github.com/Fred78290/nct6687d
+#
+# Idempotency: /etc/ansible/facts.d/nct6687d_kernel.fact records the kernel
+# the module was last built for. A rebuild triggers when the kernel changes,
+# the source is updated, or the fact file is absent.
+# To force a rebuild: remove /etc/ansible/facts.d/nct6687d_kernel.fact on the host.
+- name: Clone or update nct6687d source
+  ansible.builtin.git:
+    repo: "{{ fan_control_nct6687d_repo_url }}"
+    dest: "{{ fan_control_nct6687d_src_dir }}"
+    version: main
+    update: true
+  register: fan_control_nct6687d_git
+
+- name: Check recorded build kernel version
+  ansible.builtin.stat:
+    path: "{{ fan_control_nct6687d_kernel_version_fact_file }}"
+  register: fan_control_nct6687d_fact_file
+
+- name: Read recorded build kernel version
+  ansible.builtin.slurp:
+    src: "{{ fan_control_nct6687d_kernel_version_fact_file }}"
+  register: fan_control_nct6687d_fact_raw
+  when: fan_control_nct6687d_fact_file.stat.exists
+
+- name: Determine whether a rebuild is needed
+  ansible.builtin.set_fact:
+    fan_control_nct6687d_needs_build: >-
+      {{
+        not fan_control_nct6687d_fact_file.stat.exists
+        or (fan_control_nct6687d_fact_raw.content | b64decode | trim | from_json).kernel != ansible_facts['kernel']
+        or fan_control_nct6687d_git.changed
+      }}
+
+- name: Build nct6687d DKMS package
+  community.general.make:
+    target: deb
+    chdir: "{{ fan_control_nct6687d_src_dir }}"
+  when: fan_control_nct6687d_needs_build
+  changed_when: true
+
+- name: Find built .deb package (makefile puts it in parent dir)
+  ansible.builtin.find:
+    paths: "{{ fan_control_nct6687d_build_dir }}"
+    patterns: "{{ fan_control_nct6687d_dkms_glob }}"
+    file_type: file
+  register: fan_control_nct6687d_deb
+  when: fan_control_nct6687d_needs_build
+
+- name: Assert exactly one .deb was found
+  ansible.builtin.assert:
+    that: fan_control_nct6687d_deb.files | length == 1
+    fail_msg: >-
+      Expected exactly one {{ fan_control_nct6687d_dkms_glob }} in {{ fan_control_nct6687d_build_dir }},
+      found {{ fan_control_nct6687d_deb.files | length }}.
+      Check the make deb output above.
+  when: fan_control_nct6687d_needs_build
+
+# ansible.builtin.apt with deb: is intentionally NOT used here.
+# It checks dpkg's package database by name and reports ok if the package
+# is already registered — even if it was built for a different kernel and
+# the DKMS post-install hook never ran for the current one. The result is
+# a silent non-install and a missing module under /lib/modules/$(uname -r).
+#
+# dpkg -i forces the full install pipeline every time, including the DKMS
+# post-install hook that runs:
+#   dkms build -m nct6687d -k $(uname -r)
+#   dkms install -m nct6687d -k $(uname -r)
+#
+# This is why proxmox_base must reboot into the new kernel *before* this
+# role runs — DKMS builds only for the currently running kernel (uname -r),
+# not for all installed kernels.
+
+- name: Install nct6687d DKMS package
+  ansible.builtin.command:
+    cmd: dpkg -i "{{ fan_control_nct6687d_deb.files[0].path }}"
+  when: fan_control_nct6687d_needs_build
+  changed_when: true
+
+- name: Ensure facts directory exists
+  ansible.builtin.file:
+    path: /etc/ansible/facts.d
+    state: directory
+    mode: "0755"
+
+- name: Record kernel version this build was made for
+  ansible.builtin.copy:
+    content: "{{ {'kernel': ansible_facts['kernel']} | to_json }}\n"
+    dest: "{{ fan_control_nct6687d_kernel_version_fact_file }}"
+    mode: "0644"
+  when: fan_control_nct6687d_needs_build
+
+- name: Ensure nct6687 module loads at boot
+  ansible.builtin.lineinfile:
+    path: /etc/modules-load.d/nct6687.conf
+    line: nct6687
+    create: true
+    mode: "0644"
+
+- name: Load nct6687 module now if not already loaded
+  community.general.modprobe:
+    name: "{{ fan_control_nct6687d_module }}"
+    state: present

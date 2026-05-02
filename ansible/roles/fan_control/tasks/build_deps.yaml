@@ -1,0 +1,16 @@
+---
+# build-essential + the headers matching the *running* kernel.
+# This task list re-runs on every kernel upgrade because
+# linux-headers-$(uname -r) is version-specific.
+
+- name: Install kernel headers for running kernel
+  ansible.builtin.apt:
+    name:
+      - build-essential
+      - "proxmox-headers-{{ ansible_facts['kernel'] }}"
+      - dkms
+      - dh-dkms
+      - git
+    state: present
+    update_cache: true
+  tags: [build-deps]

@@ -1,0 +1,21 @@
+---
+galaxy_info:
+  role_name: fan_control
+  author: Gergely Peidl
+  license: MIT
+  description: >
+    Builds and installs the nct6687d out-of-tree kernel driver for
+    MSI MAG B650M Mortar WiFi, runs sensors-detect on first boot,
+    and deploys a boot-time fan-curve-updater that writes a fresh
+    /etc/fancontrol with resolved hwmon paths before starting fancontrol.
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+    - name: Ubuntu
+      versions:
+        - jammy
+        - noble
+
+dependencies: []

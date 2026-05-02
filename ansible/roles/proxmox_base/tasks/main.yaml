@@ -1,0 +1,8 @@
+---
+- name: Upgrade Proxmox packages
+  ansible.builtin.import_tasks: apt_upgrade.yaml
+  tags: [proxmox_base, upgrade]
+
+- name: Reboot if new kernel was installed
+  ansible.builtin.import_tasks: reboot.yaml
+  tags: [proxmox_base, reboot]

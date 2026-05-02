@@ -1,0 +1,16 @@
+---
+galaxy_info:
+  role_name: proxmox_base
+  author: Gergely Peidl
+  license: MIT
+  description: >
+    Upgrades Proxmox VE packages via pveupgrade, reboots if a new kernel
+    was installed, and re-gathers facts so downstream roles see the
+    post-reboot kernel version.
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+
+dependencies: []

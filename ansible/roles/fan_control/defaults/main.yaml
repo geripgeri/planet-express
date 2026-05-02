@@ -1,0 +1,23 @@
+---
+# nct6687d kernel driver
+fan_control_nct6687d_repo_url: https://github.com/Fred78290/nct6687d
+fan_control_nct6687d_src_dir: /usr/local/src/nct6687d
+fan_control_nct6687d_build_dir: /usr/local/src  # makefile puts the .deb one level up
+fan_control_nct6687d_module: nct6687
+fan_control_nct6687d_dkms_glob: "nct6687d-dkms_*.deb"
+fan_control_nct6687d_kernel_version_fact_file: /etc/ansible/facts.d/nct6687d_kernel.fact
+
+# fan_control
+fan_control_config_path: /etc/fancontrol
+fan_control_generate_script: /usr/local/bin/generate-fancontrol.sh
+fan_control_generate_service: generate-fancontrol
+fan_control_service: fancontrol
+
+# Path where Ansible persists the "sensors-detect has run" marker.
+# Using local_facts so it survives across plays without an external store.
+fan_control_sensors_detect_fact_file: /etc/ansible/facts.d/sensors_detected.fact
+
+# lm-sensors package that provides fancontrol + sensors-detect
+fan_control_lm_sensors_packages:
+  - lm-sensors
+  - fancontrol
