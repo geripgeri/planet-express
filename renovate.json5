@@ -38,6 +38,15 @@
       "automerge": false,
       "prPriority": 10,
       "groupName": "chore: license year updates"
+    },
+
+    // Ignore GitHub Actions that are incompatible with Gitea (prevent immortal PRs)
+    {
+      "matchDepNames": ["actions/download-artifact", "actions/upload-artifact"],
+      "enabled": false,
+      "automerge": false,
+      "prPriority": 0,
+      "groupName": "ignored: gitea-incompatible actions"
     }
   ],
   "prHourlyLimit": 2,
