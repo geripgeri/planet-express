@@ -6,11 +6,6 @@
   "timezone": "UTC",
   "labels": ["renovate"],
 
-  // Redirect OpenTofu providers away from registry.terraform.io
-  "registryAliases": {
-    "registry.terraform.io": "registry.opentofu.org"
-  },
-
   "customManagers": [
     // Custom regex-based manager(s) — used here to update the license year in a LICENSE file
     // Regex used to capture the current year or year range from the file.
@@ -52,6 +47,12 @@
       "automerge": false,
       "prPriority": 0,
       "groupName": "ignored: gitea-incompatible actions"
+    },
+
+    // OpenTofu providers and modules live on registry.opentofu.org
+    {
+      "matchDatasources": ["terraform-provider", "terraform-module"],
+      "registryUrls": ["https://registry.opentofu.org"]
     }
   ],
   "prHourlyLimit": 2,
