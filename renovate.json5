@@ -6,6 +6,11 @@
   "timezone": "UTC",
   "labels": ["renovate"],
 
+  // Redirect OpenTofu providers away from registry.terraform.io
+  "registryAliases": {
+    "registry.terraform.io": "registry.opentofu.org"
+  },
+
   "customManagers": [
     // Custom regex-based manager(s) — used here to update the license year in a LICENSE file
     // Regex used to capture the current year or year range from the file.
@@ -47,19 +52,6 @@
       "automerge": false,
       "prPriority": 0,
       "groupName": "ignored: gitea-incompatible actions"
-    },
-
-    // OpenTofu providers live on registry.opentofu.org, not registry.terraform.io
-    {
-      "matchManagers": ["terraform"],
-      "matchDepNames": ["opentofu/random", "opentofu/local"],
-      "registryUrls": ["https://registry.opentofu.org"]
-    },
-
-    // Ansible Galaxy collections require an explicit registry URL to resolve
-    {
-      "matchDatasources": ["galaxy-collection"],
-      "registryUrls": ["https://galaxy.ansible.com/"]
     }
   ],
   "prHourlyLimit": 2,
