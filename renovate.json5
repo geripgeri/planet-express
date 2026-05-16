@@ -6,6 +6,10 @@
   "timezone": "UTC",
   "labels": ["renovate"],
 
+  // Raise a PR immediately when OSV publishes a vulnerability affecting
+  // a resolved version in the lockfile — bypasses minimumReleaseAge.
+  "osvVulnerabilityAlerts": true,
+
   "customManagers": [
     // Custom regex-based manager(s) — used here to update the license year in a LICENSE file
     // Regex used to capture the current year or year range from the file.
@@ -53,6 +57,15 @@
     {
       "matchDatasources": ["terraform-provider", "terraform-module"],
       "registryUrls": ["https://registry.opentofu.org"]
+    },
+
+    // Vulnerability alerts should jump the queue and never be held
+    // by the minimumReleaseAge gate set above for pypi packages.
+    {
+      "matchCategories": ["security"],
+      "prPriority": 20,
+      "minimumReleaseAge": "0 days",
+      "labels": ["renovate", "security"]
     }
   ],
   "prHourlyLimit": 2,

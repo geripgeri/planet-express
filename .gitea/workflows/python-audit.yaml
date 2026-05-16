@@ -1,0 +1,40 @@
+name: Python Security Audit
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: "0 3 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: uv audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.1.0
+        with:
+          version: "latest"
+          # Enable caching of the uv cache
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.14
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Run security audit
+        # --preview-features audit silences the experimental warning.
+        # uv audit exits non-zero if any vulnerability is found,
+        # which is what fails this job.
+        run: uv audit --preview-features audit
