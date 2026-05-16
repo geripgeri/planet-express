@@ -47,6 +47,19 @@
       "automerge": false,
       "prPriority": 0,
       "groupName": "ignored: gitea-incompatible actions"
+    },
+
+    // OpenTofu providers live on registry.opentofu.org, not registry.terraform.io
+    {
+      "matchManagers": ["terraform"],
+      "matchDepNames": ["opentofu/random", "opentofu/local"],
+      "registryUrls": ["https://registry.opentofu.org"]
+    },
+
+    // Ansible Galaxy collections require an explicit registry URL to resolve
+    {
+      "matchDatasources": ["galaxy-collection"],
+      "registryUrls": ["https://galaxy.ansible.com/"]
     }
   ],
   "prHourlyLimit": 2,
