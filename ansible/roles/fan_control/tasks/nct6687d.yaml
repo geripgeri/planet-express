@@ -34,6 +34,20 @@
         or fan_control_nct6687d_git.changed
       }}
 
+- name: Find old nct6687d deb files
+  ansible.builtin.find:
+    paths: "{{ fan_control_nct6687d_build_dir }}"
+    patterns: "*.deb"
+    recurse: no
+  register: found_debs
+
+- name: Remove found deb files
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ found_debs.files }}"
+  when: found_debs.matched > 0
+
 - name: Build nct6687d DKMS package
   community.general.make:
     target: deb
