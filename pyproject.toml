@@ -6,9 +6,11 @@ readme = "README.md"
 requires-python = ">=3.14"
 
 dependencies = [
+    "ansible-lint>=25",
     "pre-commit>=4.5.1",
     "pytest>=9.0.3",
     "pytest-cov>=7.1",
+    "pyyaml>=6",
 ]
 
 [tool.pytest.ini_options]
