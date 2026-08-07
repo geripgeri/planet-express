@@ -17,7 +17,7 @@
 #   Called by the generate-fancontrol.service systemd unit at boot.
 #   Can also be run manually: /usr/local/bin/generate-fancontrol.sh
 
-set -e
+set -euo pipefail
 
 # Function to find hwmon directory by device name
 find_hwmon_dir() {
@@ -34,11 +34,11 @@ find_hwmon_dir() {
 # Detect hwmon directories
 DIR_NCT6687=$(find_hwmon_dir "nct6687")   # motherboard/PSU sensors
 DIR_K10TEMP=$(find_hwmon_dir "k10temp")   # CPU
-DIR_DRIVETEMP=$(find_hwmon_dir "drivetemp") # HDDs
+DIR_DRIVETEMP=$(find_hwmon_dir "drivetemp") # HDDs (optional)
 
-# Validate detection
-if [[ -z "$DIR_NCT6687" || -z "$DIR_K10TEMP" || -z "$DIR_DRIVETEMP" ]]; then
-    echo "Error: Could not detect all hwmon devices."
+# Validate detection of the devices that can never be missing
+if [[ -z "$DIR_NCT6687" || -z "$DIR_K10TEMP" ]]; then
+    echo "Error: Could not detect nct6687 or k10temp hwmon devices." >&2
     exit 1
 fi
 
@@ -57,7 +57,16 @@ FAN5="$DIR_NCT6687/fan5_input"
 
 TEMP1_CPU="$DIR_K10TEMP/temp1_input"
 TEMP2_MOBO="$DIR_NCT6687/temp2_input"
-TEMP_HDD="$DIR_DRIVETEMP/temp1_input"
+
+# drivetemp appears only when a SATA drive exposing it is present.
+# Fall back to the motherboard temperature so the drive fans still have a
+# valid source instead of aborting the whole boot unit.
+if [[ -z "$DIR_DRIVETEMP" ]]; then
+    TEMP_HDD="$TEMP2_MOBO"
+    echo "Warning: drivetemp hwmon not found; drive fans tied to motherboard temperature." >&2
+else
+    TEMP_HDD="$DIR_DRIVETEMP/temp1_input"
+fi
 
 # Generate /etc/fancontrol
 tee /etc/fancontrol >/dev/null <<EOF

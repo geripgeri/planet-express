@@ -1,17 +1,36 @@
 ---
-# Reboots the host if a kernel package was upgraded, then re-gathers facts.
+# Reboots the host if a newer PVE kernel than the running one is installed,
+# then re-gathers facts so downstream roles see the new kernel.
 #
-# Detection: checks whether 'proxmox-kernel' appears in the apt upgrade
-# output registered in apt_upgrade.yml. No shell commands or dpkg parsing
-# needed — the information is already in the apt task's return value.
-#
-# After the reboot, gather_facts is called so that ansible_kernel reflects
-# the new kernel for all subsequent roles. Without this the fan_control role
-# would see the pre-reboot kernel version and skip the nct6687d rebuild.
+# Detection uses the installed package set (package_facts), not apt output
+# text: it is language-independent and cannot false-positive on
+# "will be REMOVED" lines. Every installed proxmox-kernel-*/pve-kernel-*
+# version is compared against the running kernel (ansible_facts['kernel']).
 
-- name: Determine if a kernel package was upgraded
+- name: Gather installed packages after upgrade
+  ansible.builtin.package_facts:
+    manager: apt
+
+- name: List installed PVE kernel packages
   ansible.builtin.set_fact:
-    proxmox_base_needs_reboot: "{{ 'proxmox-kernel' in proxmox_base_apt_upgrade.stdout }}"
+    proxmox_base_kernel_pkgs: >-
+      {{
+        ansible_facts.packages
+        | list
+        | select('match', '^(proxmox-|pve-)kernel-[0-9]')
+        | list
+      }}
+
+- name: Determine if a newer kernel than the running one is installed
+  ansible.builtin.set_fact:
+    proxmox_base_needs_reboot: >-
+      {{
+        proxmox_base_kernel_pkgs
+        | reject('search', ansible_facts['kernel'])
+        | map('regex_replace', '^(proxmox-|pve-)kernel-', '')
+        | select('version', ansible_facts['kernel'], '>')
+        | list | length > 0
+      }}
 
 - name: Reboot host to apply new kernel
   ansible.builtin.reboot:

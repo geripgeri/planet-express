@@ -13,4 +13,5 @@
       - git
     state: present
     update_cache: true
+    lock_timeout: 300
   tags: [build-deps]

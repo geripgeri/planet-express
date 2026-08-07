@@ -113,6 +113,13 @@
     create: true
     mode: "0644"
 
+- name: Ensure drivetemp module (HDD temps) loads at boot
+  ansible.builtin.lineinfile:
+    path: /etc/modules-load.d/nct6687.conf
+    line: drivetemp
+    create: true
+    mode: "0644"
+
 - name: Load nct6687 module now if not already loaded
   community.general.modprobe:
     name: "{{ fan_control_nct6687d_module }}"

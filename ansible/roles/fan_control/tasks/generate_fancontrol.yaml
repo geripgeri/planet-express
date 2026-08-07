@@ -32,9 +32,11 @@
     - Restart generate-fancontrol
     - Restart fancontrol
 
+# Enable only. Starting is left to the handlers above, so a re-run of an
+# unchanged play does not repeatedly re-execute the oneshot script (which
+# was implicit via `state: restarted` and made the task always-changed).
 - name: Enable generate-fancontrol service
   ansible.builtin.systemd:
     name: "{{ fan_control_generate_service }}"
     enabled: true
     daemon_reload: true
-    state: restarted

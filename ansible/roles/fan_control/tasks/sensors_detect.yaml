@@ -8,6 +8,7 @@
   ansible.builtin.apt:
     name: "{{ fan_control_lm_sensors_packages }}"
     state: present
+    lock_timeout: 300
 
 - name: Check whether sensors-detect has already run
   ansible.builtin.stat:
