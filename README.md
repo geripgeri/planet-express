@@ -244,12 +244,4 @@ ______________________________________________________________________
 
 ## Getting Started
 
-This project uses **[uv](https://docs.astral.sh/uv/)** for Python package and project management.
-
-```bash
-uv sync --all-extras --dev   # install dependencies
-uv run pytest                # run tests
-uv run pre-commit install    # install pre-commit hooks
-```
-
-`scripts/link_adr.py` validates ADR cross-references and ensures decision links stay current.
+Install the full toolchain (uv, OpenTofu + Terragrunt via tfswitch/tgswitch, sops, age) by following the [install doc](docs/install.md).
