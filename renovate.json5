@@ -11,21 +11,31 @@
   "osvVulnerabilityAlerts": true,
 
   "customManagers": [
-    // Custom regex-based manager(s) — used here to update the license year in a LICENSE file
-    // Regex used to capture the current year or year range from the file.
-    // Uses a named capture group "years" so it can be referenced in templates.
+    // Custom regex manager: updates the copyright year in the LICENSE file.
+    // The "current year" comes from the custom.year datasource (timeapi.io).
+    // The start year (2026) is static; the template rewrites the line to a
+    // "2026-YYYY" range, e.g. 2026 -> 2026-2027 -> 2026-2028.
     {
       "customType": "regex",
       "managerFilePatterns": ["/^LICENSE$/"],
       "matchStrings": [
-        "Copyright \\(c\\) (?<currentYear>\\d{4}(?:\\s*[-–—]\\s*\\d{4})?)"
+        "Copyright \\(c\\) (?:2026\\s*[-–—]\\s*)?(?<currentValue>\\d{4})"
       ],
-      "datasourceTemplate": "regex",
+      "datasourceTemplate": "custom.year",
       "depNameTemplate": "license-year",
-      "versioningTemplate": "semver",
-      "currentValueTemplate": "{{currentYear}}"
+      "versioningTemplate": "loose",
+      "autoReplaceStringTemplate": "Copyright (c) 2026-{{newValue}}"
     }
   ],
+  "customDatasources": {
+    "year": {
+      "defaultRegistryUrlTemplate": "https://timeapi.io/api/Time/current/zone?timeZone=UTC",
+      "format": "json",
+      "transformTemplates": [
+        "{'releases': [{'version': $string($.year)}]}"
+      ]
+    }
+  },
   "packageRules": [
     {"matchManagers": ["terraform"], "automerge": false, "prPriority": 5},
     {"matchManagers": ["terragrunt"], "prPriority": 5, "automerge": false},
