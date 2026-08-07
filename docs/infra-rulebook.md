@@ -460,7 +460,7 @@ ______________________________________________________________________
 **Rule ALT-02: Store signal-cli-rest-api registration data on a `longhorn` (3-replica) PVC.** **Source:** ([ADR-012](decisions/ADR-012-alerting.md)) **Rationale:** Losing the registration PVC requires a new SMS verification code, which cannot be automated and creates a manual recovery step. **Implementation:**
 
 - StorageClass: `longhorn` (3 replicas) — the only observability component that must not use `longhorn-single-replica`
-- One-time registration: `kubectl exec` into the container, documented in Phase 6 runbook
+- One-time registration via the REST API (`/v1/register/<number>` then `/v1/register/<number>/verify/<code>`), no `kubectl exec` into the container required; documented in Phase 6 runbook
 - TODO: document recovery procedure if PVC is lost
 
 **Tags:** observability, alerting, storage
@@ -476,8 +476,29 @@ ______________________________________________________________________
 - Template (apply to every new namespace):
 
   ```yaml
-  apiVersion: cilium.io/v2kind: CiliumNetworkPolicymetadata:  name: default-deny  namespace: <app-namespace>spec:  endpointSelector: {}  ingress:    - {}  egress:    - toEndpoints:        - matchLabels:            io.kubernetes.pod.namespace: kube-system            k8s-app: kube-dns      toPorts:        - ports:            - port: "53"              protocol: UDP
+  apiVersion: cilium.io/v2
+  kind: CiliumNetworkPolicy
+  metadata:
+    name: default-deny
+    namespace: <app-namespace>
+  spec:
+    endpointSelector: {}
+    ingress:
+      - {}
+    egress:
+      - toEndpoints:
+          - matchLabels:
+              io.kubernetes.pod.namespace: kube-system
+              k8s-app: kube-dns
+        toPorts:
+          - ports:
+              - port: "53"
+                protocol: UDP
+              - port: "53"
+                protocol: TCP
   ```
+
+- Allow both TCP and UDP on port 53 to kube-dns; CoreDNS truncates large responses over UDP (TC bit set) and expects the client to retry over TCP
 
 - Workload-specific allow rules are deployed as separate `CiliumNetworkPolicy` resources alongside the workload manifests
 
@@ -543,7 +564,7 @@ ______________________________________________________________________
 
 **Rule POL-04: Restrict image sources to approved registries.** **Source:** ([ADR-014](decisions/ADR-014-kyverno.md)) **Rationale:** Images from arbitrary registries are a supply chain attack vector. **Implementation:**
 
-- Approved registries: Docker Hub official images, GHCR (`ghcr.io`), Quay.io (`quay.io`)
+- Approved registry domains: Docker Hub (`docker.io`), GHCR (`ghcr.io`), Quay.io (`quay.io`), `registry.k8s.io` (Kubernetes Special Interest Group (SIG) images, required for the NFS CSI driver). The allowlist is the registry domain, not the Docker Hub "official images" namespace, so third-party namespaces on those registries (e.g. `longhornio/*`) are allowed.
 - Kyverno `ClusterPolicy` with `validate` rule checking `image` field against the approved list
 - New registry requires a deliberate policy update and ADR note
 
@@ -556,7 +577,7 @@ ______________________________________________________________________
 - Current approved exceptions (each has a `PolicyException` resource with rationale comment):
   - Longhorn (block device management)
   - Cilium (eBPF program loading)
-  - NFS CSI driver (kernel NFS mounts)
+  - NFS CSI driver (kernel NFS mounts), with its `registry.k8s.io` images pinned via explicit Helm `image.*.tag` values (chart default is `latest`, which violates POL-03)
 - `PolicyException` resource committed under `kubernetes/infrastructure/kyverno/exceptions/`
 - No silent carve-outs via namespace label overrides
 

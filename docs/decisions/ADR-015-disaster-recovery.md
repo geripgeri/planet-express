@@ -17,7 +17,7 @@ A running Kubernetes cluster has state in three distinct places, each requiring 
 On a single-host homelab the standard dismissal ("data is either recreatable or on RAID") doesn't hold for everything. Several pieces of state here are genuinely irreplaceable:
 
 - Authentik's (see [ADR-008](ADR-008-authentik.md)) Postgres database holds users, MFA enrolments, OIDC client configs, and access policies. Losing it means re-enrolling every user and rebuilding every provider integration.
-- CNPG (see [ADR-006](ADR-006-cloudnativepg.md)) clusters backing n8n and Paperless-ngx hold workflow history and document metadata with no other source of truth.
+- CNPG (see [ADR-006](ADR-006-cloudnativepg.md)) clusters backing Paperless-ngx hold document metadata with no other source of truth. The n8n cluster holds execution history: workflow definitions live in git, but run logs and run-based data accumulated in the database do not.
 - The [cert-manager](https://cert-manager.io) ACME account registration secret (`letsencrypt-account-key`) is generated at ACME registration time and never stored in git. If it is lost during a rebuild and the domain has hit [Let's Encrypt](https://letsencrypt.org)'s wildcard rate limit (5 issuances per domain per week), production TLS stalls for up to a week. Every internal service is either unreachable or serving an invalid certificate until the limit resets.
 - ArgoCD Applications, CNPG Cluster objects, and NetworkPolicies can be reproduced from git, but reproducing them correctly and in dependency order while debugging a post-disaster cluster is significantly harder than restoring from backup.
 

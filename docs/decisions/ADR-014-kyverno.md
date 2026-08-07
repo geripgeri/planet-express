@@ -28,8 +28,8 @@ The initial policy set covers the high-signal, low-controversy invariants:
 
 - **Resource limits required** on all containers (CPU and memory)
 - **No `latest` image tags** — every image reference must use a pinned tag, enforced alongside Renovate (see [ADR-004](ADR-004-renovate.md)) which manages pinned tag lifecycle via automated pull requests
-- **Approved registries only** — images must come from Docker Hub official images, GitHub Container Registry (GHCR), or Quay.io
-- **No privileged containers**, with named exceptions for Longhorn (see [ADR-007](ADR-007-longhorn.md)), Cilium (see [ADR-005](ADR-005-cilium-gateway-api.md)), and the NFS Container Storage Interface (CSI) driver, each committed as a named `PolicyException` resource with a documented rationale
+- **Approved registries only** — images must come from Docker Hub (`docker.io`), GitHub Container Registry (GHCR, `ghcr.io`), Quay.io (`quay.io`), or `registry.k8s.io` (Kubernetes Special Interest Group (SIG) images such as the NFS Container Storage Interface (CSI) driver). The allowlist is the registry domain, not the Docker Hub "official images" namespace: third-party namespaces on these registries (such as `longhornio/*` or `n8nio/*`) are permitted.
+- **No privileged containers**, with named exceptions for Longhorn (see [ADR-007](ADR-007-longhorn.md)), Cilium (see [ADR-005](ADR-005-cilium-gateway-api.md)), and the NFS Container Storage Interface (CSI) driver, each committed as a named `PolicyException` resource with a documented rationale. The NFS CSI driver images from `registry.k8s.io` must be pinned with explicit `tag` values in the Helm values; the chart default (`latest`) violates the no-`latest` rule below.
 
 Mutation is used in development environments to inject default resource limits and standard labels on resources that arrive without them, rather than rejecting them outright.
 

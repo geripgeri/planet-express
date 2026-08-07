@@ -37,9 +37,11 @@ spec:
         - ports:
             - port: "53"
               protocol: UDP
+            - port: "53"
+              protocol: TCP
 ```
 
-All ingress is denied by default. Egress is denied except for DNS, which is a required carveout: without it, service name resolution fails silently in ways that are hard to diagnose. Explicit allow rules for real traffic paths are added as separate `CiliumNetworkPolicy` resources per workload.
+All ingress is denied by default. Egress is denied except for DNS, which is a required carveout: without it, service name resolution fails silently in ways that are hard to diagnose. Both TCP and UDP firewall rules on port 53 must be allowed: CoreDNS answers large responses (SRV records, long TXT records) with the truncation (TC) bit set over UDP and expects the client to retry over TCP, which would be dropped if only UDP 53 is permitted. Explicit allow rules for real traffic paths are added as separate `CiliumNetworkPolicy` resources per workload.
 
 `CiliumNetworkPolicy` CRDs are used instead of standard `networking.k8s.io/v1 NetworkPolicy` for three reasons. First, Layer 7 (L7) policy: standard NetworkPolicy operates at Layer 3/Layer 4 (L3/L4) only; Cilium's CRDs support path-level HTTP rules and DNS-name-based egress, which are the correct abstraction for fine-grained service-to-service controls. Second, [Hubble](https://docs.cilium.io/en/stable/overview/intro/) integration: when a policy denies a connection, Hubble shows the drop with full context (source endpoint, destination endpoint, matched rule), turning "something is broken" into "the Prometheus scraper is denied ingress because the allow rule references the wrong label selector." Third, no additional component: Cilium is already the CNI and the policy engine.
 
