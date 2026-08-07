@@ -1,6 +1,9 @@
 {
   $schema: "https://docs.renovatebot.com/renovate-schema.json",
   dependencyDashboard: true,
+  // Let Renovate merge PRs via the API itself: platform-native automerge
+  // needs Gitea >= 1.24 and branch auto-delete, and is unreliable otherwise.
+  platformAutomerge: false,
 
   "extends": ["config:recommended"],
   "timezone": "UTC",
@@ -37,19 +40,23 @@
     }
   },
   "packageRules": [
-    {"matchManagers": ["terraform"], "automerge": false, "prPriority": 5},
-    {"matchManagers": ["terragrunt"], "prPriority": 5, "automerge": false},
+    // These managers keep prPriority but not automerge:false, because all
+    // non-breaking (minor/patch) updates are auto-merged by the last rule
+    // regardless of manager. Only major/breaking updates always stay manual.
+    {"matchManagers": ["terraform"], "prPriority": 5},
+    {"matchManagers": ["terragrunt"], "prPriority": 5},
     {
       "matchManagers": ["pre-commit"],
       "prPriority": 6,
-      "automerge": false,
       "matchPackageNames": ["/^pre-commit/", "/.*-hook$/", "/.*hook-.*/"]
     },
     {"matchDatasources": ["pypi"], "minimumReleaseAge": "1 week"},
-    {"matchManagers": ["github-actions"], "prPriority": 5, "automerge": false},
+    {"matchManagers": ["github-actions"], "prPriority": 5},
     {
       "matchDepNames": ["license-year"],
-      "automerge": false,
+      // The yearly copyright-line PR is text-only and confirmed by Renovate's
+      // own re-extract check, so it is safe to auto-merge.
+      "automerge": true,
       "prPriority": 10,
       "groupName": "chore: license year updates"
     },
@@ -76,6 +83,20 @@
       "prPriority": 20,
       "minimumReleaseAge": "0 days",
       "labels": ["renovate", "security"]
+    },
+
+    // Auto-merge non-breaking updates (minor/patch, excluding 0.x which may
+    // break at any time). This rule is declared last so its automerge:true
+    // wins for the managers above too - that is intended: automerge covers all
+    // non-breaking updates, only major/breaking changes stay manual.
+    {
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchCurrentVersion": "!/^0\\./",
+      "automerge": true
+    },
+    {
+      "matchUpdateTypes": ["digest", "lockFileMaintenance"],
+      "automerge": true
     }
   ],
   "prHourlyLimit": 2,
