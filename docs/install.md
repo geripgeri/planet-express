@@ -64,6 +64,45 @@ uv run pre-commit run --all-files
 
 `scripts/link_adr.py` validates ADR cross-references and keeps decision links current, exercised via the pytest and pre-commit runs above.
 
+The `ansible-lint` pre-commit hook lints the whole `ansible/` tree and needs the collections from `ansible/requirements.yaml` on disk. Install them once with:
+
+```bash
+uv run --with ansible-core ansible-galaxy collection install -r ansible/requirements.yaml
+```
+
+## Install kubeconform and tflint
+
+Used by the `kubeconform` and `terraform_tflint` pre-commit hooks; not managed by the switchers. The release installs below put the binaries in `$HOME/bin`, which must be on `PATH` (same note as in the version switchers section below).
+
+Linux release binaries:
+
+```bash
+# kubeconform (replace v0.8.0 with the current release)
+curl -L https://github.com/yannh/kubeconform/releases/download/v0.8.0/kubeconform-linux-amd64.tar.gz -o /tmp/kubeconform.tgz
+tar -xzf /tmp/kubeconform.tgz -C /tmp kubeconform
+install -m 0755 /tmp/kubeconform "$HOME/bin/kubeconform"
+
+# tflint (replace v0.64.0 with the current release)
+curl -L https://github.com/terraform-linters/tflint/releases/download/v0.64.0/tflint_linux_amd64.zip -o /tmp/tflint.zip
+unzip -o /tmp/tflint.zip -d /tmp/tflint
+install -m 0755 /tmp/tflint/tflint "$HOME/bin/tflint"
+```
+
+Homebrew:
+
+```bash
+brew install kubeconform tflint
+```
+
+Verify both:
+
+```bash
+kubeconform -v
+tflint --version
+```
+
+Note, `kubeconform` fetches CRD schemas from the internet on first run; the sandboxed network policy may block this.
+
 ## Install version switchers
 
 Installing the switchers once is enough; they fetch and install the exact OpenTofu and Terragrunt versions.
