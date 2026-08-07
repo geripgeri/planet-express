@@ -1,3 +1,7 @@
+locals {
+  secret_vars = yamldecode(sops_decrypt_file(find_in_parent_folders("secrets.yaml")))
+}
+
 include "root" {
   path = find_in_parent_folders("root.hcl")
 }
@@ -7,7 +11,7 @@ terraform {
 }
 
 dependency "talos_vms" {
-  config_path = "../talos-vms"
+  config_path = "../proxmox/talos-vms"
 }
 
 inputs = {
@@ -16,6 +20,8 @@ inputs = {
     version            = "v1.12.4"
     longhorn_disk_size = "100GB"
   }
+
+  network_config = local.secret_vars.network_config
 
   controller_ips  = [dependency.talos_vms.outputs.ip_addresses["talos-controller-01"]]
   controller_vmid = dependency.talos_vms.outputs.vmids["talos-controller-01"]

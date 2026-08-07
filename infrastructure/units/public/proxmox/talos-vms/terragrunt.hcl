@@ -45,6 +45,8 @@ EOF
 }
 
 inputs = {
+  proxmox = local.secret_vars.proxmox
+
   vm_details = {
     agent_number       = 1
     socket_number      = 1

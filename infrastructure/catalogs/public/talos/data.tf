@@ -32,7 +32,7 @@ data "talos_machine_configuration" "controller" {
     templatefile("${path.module}/files/vlan20_interface.tfmpl", {
       vlan10_nameservers = var.network_config.vlan-10.nameservers
       vlan10_gateway     = var.network_config.vlan-10.gateway
-      vlan20_ip          = "${cidrhost(var.network_config.vlan-20.subnet, var.controller_vmid - 400)}/24"
+      vlan20_ip          = "${cidrhost(var.network_config.vlan-20.subnet, var.controller_vmid - 400)}/${split("/", var.network_config.vlan-20.subnet)[1]}"
     }),
   ]
 }
@@ -56,7 +56,7 @@ data "talos_machine_configuration" "worker" {
     templatefile("${path.module}/files/vlan20_interface.tfmpl", {
       vlan10_nameservers = var.network_config.vlan-10.nameservers
       vlan10_gateway     = var.network_config.vlan-10.gateway
-      vlan20_ip          = "${cidrhost(var.network_config.vlan-20.subnet, each.value.vmid - 400)}/24"
+      vlan20_ip          = "${cidrhost(var.network_config.vlan-20.subnet, each.value.vmid - 400)}/${split("/", var.network_config.vlan-20.subnet)[1]}"
     }),
   ]
 }

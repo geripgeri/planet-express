@@ -101,7 +101,7 @@ resource "proxmox_vm_qemu" "this" {
   lifecycle {
     prevent_destroy = false
     ignore_changes = [
-      disk, target_node
+      disks, target_node
     ]
   }
 
