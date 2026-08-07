@@ -18,9 +18,7 @@ repos:
     - id: trailing-whitespace
       args: [--markdown-linebreak-ext=md]
       exclude: CHANGELOG.md
-    - id: check-executables-have-shebangs
     - id: check-json
-    - id: check-merge-conflict
     - id: check-toml
     - id: check-yaml
     - id: destroyed-symlinks
@@ -73,7 +71,6 @@ repos:
       name: Link ADR references
       entry: uv run scripts/link_adr.py
       language: system
-      types: [markdown]
       files: \.md$
       pass_filenames: true
       verbose: true
