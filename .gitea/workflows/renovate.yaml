@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Run Renovate Docker image
-        uses: docker://renovate/renovate:latest
+        uses: docker://renovate/renovate:44
         env:
           # Token stored in repository secrets; must have permissions:
           # write:issue
@@ -19,7 +19,7 @@ jobs:
           RENOVATE_TOKEN: ${{ secrets.RENOVATE_TOKEN }}
           RENOVATE_USERNAME: renovate-bot
           RENOVATE_PLATFORM: gitea
-          RENOVATE_ENDPOINT: ${{ github.server_url }}
+          RENOVATE_ENDPOINT: ${{ github.server_url }}/api/v1
           RENOVATE_REPOSITORIES: '["${{ github.repository }}"]'
           RENOVATE_LOG_LEVEL: info
           # Fine-grained personal access token, read only access to all public repositories
