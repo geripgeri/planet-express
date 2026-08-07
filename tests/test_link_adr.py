@@ -1,7 +1,9 @@
 import pathlib
-import pytest
 import sys
-from scripts.link_adr import main, build_adr_map, linkify_content, _relpath
+
+import pytest
+
+from scripts.link_adr import _relpath, build_adr_map, linkify_content, main
 
 
 @pytest.fixture

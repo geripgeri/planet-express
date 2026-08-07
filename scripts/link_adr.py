@@ -8,7 +8,7 @@ Leaves ADR in the title line (e.g., "# ADR-001: ...") unlinked.
 import pathlib
 import re
 import sys
-from typing import Dict, List, Optional, Callable
+from collections.abc import Callable
 
 ADR_DIR = pathlib.Path("docs/decisions")
 # Matches ADR-001 through ADR-999 or ADR-H
@@ -17,7 +17,7 @@ ADR_RE = re.compile(r"(?<!\w)(ADR-(?:\d{3}|H))(?!\w)")
 SKIP_RE = re.compile(r"```.*?```|`[^`]*`|\[.*?\]\(.*?\)", re.DOTALL)
 
 
-def build_adr_map(adr_dir: pathlib.Path, logger: Callable = print) -> Dict[str, str]:
+def build_adr_map(adr_dir: pathlib.Path, logger: Callable = print) -> dict[str, str]:
     """Scans the directory for ADR files and returns a mapping of ID to filename."""
     mapping = {}
     if not adr_dir.exists():
@@ -35,7 +35,7 @@ def build_adr_map(adr_dir: pathlib.Path, logger: Callable = print) -> Dict[str, 
 
 def linkify_content(
     content: str,
-    mapping: Dict[str, str],
+    mapping: dict[str, str],
     source_path: pathlib.Path,
     adr_dir: pathlib.Path = ADR_DIR,
 ) -> str:
@@ -104,7 +104,7 @@ def _relpath(target: pathlib.Path, anchor: pathlib.Path) -> str:
 
 def process_file(
     path: pathlib.Path,
-    mapping: Dict[str, str],
+    mapping: dict[str, str],
     adr_dir: pathlib.Path = ADR_DIR,
     logger: Callable = print,
 ) -> bool:
@@ -117,14 +117,14 @@ def process_file(
             path.write_text(new_content, encoding="utf-8")
             logger(f"[INFO] Updated {path}")
             return True
-    except Exception as e:
+    except (OSError, UnicodeDecodeError) as e:
         logger(f"[WARN] Failed to process {path}: {e}")
 
     return False
 
 
 def main(
-    argv: Optional[List[str]] = None,
+    argv: list[str] | None = None,
     adr_dir: pathlib.Path = ADR_DIR,
     logger: Callable = print,
 ) -> int:
