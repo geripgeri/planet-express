@@ -58,7 +58,7 @@ inputs = {
     iso_name           = "local:iso/talos-linuxnocloud-amd64.iso"
     storage            = "local-lvm"
     ipconfig           = "ip=dhcp"
-    nameserver         = local.secret_vars.network_config.vlan-10.public-nameservers-only[0]
+    nameserver         = join(" ", local.secret_vars.network_config.vlan-10.public-nameservers-only)
   }
 
   vms = merge(
