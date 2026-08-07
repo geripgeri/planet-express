@@ -24,3 +24,7 @@ source = ["scripts"]
 
 [tool.coverage.report]
 show_missing = true
+
+[tool.typos.default.extend-words]
+Hashi = "Hashi"
+RTO = "RTO"

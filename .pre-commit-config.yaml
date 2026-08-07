@@ -35,6 +35,37 @@ repos:
   rev: v8.30.0
   hooks:
     - id: gitleaks
+      entry: bash -c 'u=$(git ls-files -o --exclude-standard); if [ -n "$u" ]; then git add -N $u; fi; gitleaks protect --staged --verbose; rc=$?; if [ -n "$u" ]; then git reset -q -- $u; fi; exit $rc'
+- repo: https://github.com/rhysd/actionlint
+  rev: v1.7.12
+  hooks:
+    - id: actionlint
+      files: ^\.gitea/workflows/
+      args: ['-ignore', 'the runner of .* action is too old.*']
+- repo: https://github.com/shellcheck-py/shellcheck-py
+  rev: v0.11.0.1
+  hooks:
+    - id: shellcheck
+- repo: https://github.com/crate-ci/typos
+  rev: v1.49.0
+  hooks:
+    - id: typos
+      args: [--force-exclude]
+      exclude: (^\.sops\.yaml$|^infrastructure/secrets\.yaml$|.*vault\.sops\.ya?ml$|.*secret?s?\.ya?ml$)
+- repo: https://github.com/ansible/ansible-lint
+  rev: v26.6.0
+  hooks:
+    - id: ansible-lint
+      entry: bash -c 'cd ansible && python3 -m ansiblelint -v --force-color'
+- repo: https://github.com/zrootorg/kubeconform-precommit-hook
+  rev: v0.0.1
+  hooks:
+    - id: kubeconform
+      args: [-p./kubernetes]
+- repo: https://github.com/antonbabenko/pre-commit-terraform
+  rev: v1.108.1
+  hooks:
+    - id: terraform_tflint
 - repo: https://github.com/hukkin/mdformat
   rev: 1.0.0
   hooks:
@@ -46,14 +77,14 @@ repos:
     - mdformat-black
 
 - repo: https://github.com/astral-sh/ruff-pre-commit
-  rev: v0.15.12
+  rev: v0.16.2
   hooks:
     - id: ruff-format
     - id: ruff
       args: [--fix, --exit-non-zero-on-fix]
 
 - repo: https://github.com/tofuutils/pre-commit-opentofu
-  rev: v2.3.0
+  rev: v2.4.2
   hooks:
     - id: tofu_fmt
     - id: terragrunt_fmt
