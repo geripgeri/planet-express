@@ -1,8 +1,14 @@
 terraform {
+  required_version = ">= 1.12.5"
   required_providers {
     local = {
       source  = "opentofu/local"
       version = "~> 2.5"
+    }
+
+    null = {
+      source  = "opentofu/null"
+      version = "3.3.0"
     }
 
     talos = {
@@ -68,7 +74,7 @@ resource "talos_machine_configuration_apply" "worker" {
   node                        = each.value.ip
 }
 
-# Start the bootstraping of the cluster
+# Start the bootstrapping of the cluster
 resource "talos_machine_bootstrap" "this" {
   depends_on           = [talos_machine_configuration_apply.controller]
   client_configuration = talos_machine_secrets.this.client_configuration
