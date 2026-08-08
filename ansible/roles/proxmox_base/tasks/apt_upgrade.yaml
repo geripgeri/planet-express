@@ -15,6 +15,9 @@
     update_cache: true
     cache_valid_time: 0  # always refresh — we're about to upgrade
     lock_timeout: 300
+  # apt still performs a live `apt update` in check mode; skip it so
+  # verify.yaml (read-only CI) has no side effects at all.
+  when: not ansible_check_mode
 
 - name: Upgrade all packages (dist-upgrade)
   ansible.builtin.apt:

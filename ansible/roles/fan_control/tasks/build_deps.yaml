@@ -14,4 +14,7 @@
     state: present
     update_cache: true
     lock_timeout: 300
+  # Same as apt_upgrade.yaml: apt performs a live `apt update` even in check
+  # mode; skip it so verify.yaml stays side-effect free.
+  when: not ansible_check_mode
   tags: [build-deps]
