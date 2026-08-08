@@ -3,6 +3,7 @@ variable "talos_cluster_details" {
   type = object({
     name               = string
     version            = string
+    kubernetes_version = string
     longhorn_disk_size = string
   })
 
@@ -14,6 +15,11 @@ variable "talos_cluster_details" {
   validation {
     condition     = can(regex("^v?[0-9]+\\.[0-9]+\\.[0-9]+(-[a-zA-Z0-9.-]+)?$", var.talos_cluster_details.version))
     error_message = "Version must be a valid semantic version (e.g., v1.2.3 or 1.2.3-alpha)."
+  }
+
+  validation {
+    condition     = can(regex("^[0-9]+\\.[0-9]+\\.[0-9]+$", var.talos_cluster_details.kubernetes_version))
+    error_message = "Kubernetes version must be a valid semantic version (e.g., 1.35.0)."
   }
 
   validation {

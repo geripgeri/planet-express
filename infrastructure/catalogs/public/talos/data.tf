@@ -20,11 +20,12 @@ data "talos_client_configuration" "this" {
 
 # Generate the controller configuration and instantiate the Initial Image for the Talos configuration
 data "talos_machine_configuration" "controller" {
-  cluster_name     = var.talos_cluster_details.name
-  talos_version    = var.talos_cluster_details.version
-  cluster_endpoint = "https://${var.controller_ips[0]}:6443"
-  machine_type     = "controlplane"
-  machine_secrets  = talos_machine_secrets.this.machine_secrets
+  cluster_name       = var.talos_cluster_details.name
+  talos_version      = var.talos_cluster_details.version
+  kubernetes_version = var.talos_cluster_details.kubernetes_version
+  cluster_endpoint   = "https://${var.controller_ips[0]}:6443"
+  machine_type       = "controlplane"
+  machine_secrets    = talos_machine_secrets.this.machine_secrets
   config_patches = [
     templatefile("${path.module}/files/init_install_controller.tfmpl", {
       initial_image = data.talos_image_factory_urls.controller.urls.installer
@@ -41,11 +42,12 @@ data "talos_machine_configuration" "controller" {
 data "talos_machine_configuration" "worker" {
   for_each = var.workers
 
-  cluster_name     = var.talos_cluster_details.name
-  talos_version    = var.talos_cluster_details.version
-  cluster_endpoint = "https://${var.controller_ips[0]}:6443"
-  machine_type     = "worker"
-  machine_secrets  = talos_machine_secrets.this.machine_secrets
+  cluster_name       = var.talos_cluster_details.name
+  talos_version      = var.talos_cluster_details.version
+  kubernetes_version = var.talos_cluster_details.kubernetes_version
+  cluster_endpoint   = "https://${var.controller_ips[0]}:6443"
+  machine_type       = "worker"
+  machine_secrets    = talos_machine_secrets.this.machine_secrets
   config_patches = [
     templatefile("${path.module}/files/init_install_worker.tfmpl", {
       initial_image = data.talos_image_factory_urls.worker.urls.installer
