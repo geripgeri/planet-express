@@ -35,7 +35,7 @@ jobs:
 
       - name: Run tests with pytest
         run: |
-          uv run pytest --cov=./ --cov-report=xml:coverage.xml --cov-report=term-missing
+          uv run pytest --cov=./ --cov-report=xml:coverage.xml --cov-report=term-missing --junitxml=pytest.xml
 
       - name: Pytest coverage comment
         if: github.event_name == 'pull_request'
