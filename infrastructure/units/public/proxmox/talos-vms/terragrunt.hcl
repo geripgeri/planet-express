@@ -1,6 +1,9 @@
 locals {
   secret_vars  = yamldecode(sops_decrypt_file(find_in_parent_folders("secrets.yaml")))
   worker_count = 3
+  # The Proxmox API runs on a self-signed cert until it is replaced with a
+  # proper one. Flip this to false once a trusted cert is in place.
+  proxmox_tls_insecure = true
 
   worker_defaults = {
     disk_capacity            = "15G"
@@ -39,7 +42,7 @@ provider "proxmox" {
   pm_api_url          = var.proxmox.api_url
   pm_api_token_id     = var.proxmox.api_token_id
   pm_api_token_secret = var.proxmox.api_token_secret
-  pm_tls_insecure     = true # TODO change this after replacing the self-signed SSL cert.
+  pm_tls_insecure     = ${local.proxmox_tls_insecure}
 }
 EOF
 }
