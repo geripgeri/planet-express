@@ -18,6 +18,7 @@ jobs:
       - name: Run Gitleaks
         # Using the official Docker action allows the runner to handle Node.js steps
         # while still using the specific Gitleaks environment for the scan.
-        uses: docker://zricethezav/gitleaks:latest
+        # Pinned to match the gitleaks version used by the mirror workflow.
+        uses: docker://zricethezav/gitleaks:v8.30.1
         with:
           args: detect --source=. --verbose --redact
