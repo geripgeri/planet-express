@@ -11,7 +11,7 @@ terraform {
 }
 
 dependency "talos_vms" {
-  config_path = "../proxmox/talos-vms"
+  config_path = "../../proxmox/talos-vms"
 }
 
 inputs = {
