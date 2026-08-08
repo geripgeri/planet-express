@@ -32,7 +32,7 @@ repos:
     # Security
     - id: detect-private-key
 - repo: https://github.com/gitleaks/gitleaks
-  rev: v8.30.0
+  rev: v8.30.1
   hooks:
     - id: gitleaks
       entry: bash -c 'u=$(git ls-files -o --exclude-standard); if [ -n "$u" ]; then git add -N $u; fi; gitleaks protect --staged --verbose; rc=$?; if [ -n "$u" ]; then git reset -q -- $u; fi; exit $rc'
