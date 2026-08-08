@@ -168,7 +168,7 @@ ______________________________________________________________________
 ├── uv.lock
 ├── .sops.yaml
 ├── .gitattributes                # export-ignore rules (controls public mirror contents)
-└── renovate.json
+└── renovate.json5
 ```
 
 **Terragrunt pattern:** Catalogs are pure HCL modules with no live values. Units are live instantiations, one state file each. Stacks are dependency-ordered groups wiring units together.
@@ -233,6 +233,8 @@ ______________________________________________________________________
 ______________________________________________________________________
 
 ## Runbooks
+
+Planned, not yet written. Keyed to the phase deliverables in the table above:
 
 - `docs/runbooks/cluster-rebuild.md` — Full cluster recovery from scratch
 - `docs/runbooks/proxmox-rebuild.md` — Host-level steps Ansible cannot automate
