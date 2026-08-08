@@ -74,17 +74,42 @@ resource "talos_machine_configuration_apply" "worker" {
   node                        = each.value.ip
 }
 
-# Start the bootstrapping of the cluster
-resource "talos_machine_bootstrap" "this" {
-  depends_on           = [talos_machine_configuration_apply.controller]
-  client_configuration = talos_machine_secrets.this.client_configuration
-  node                 = var.controller_ips[0]
+# Bootstrap the cluster. The etcd status check doubles as an idempotency
+# guard: on an already bootstrapped cluster (e.g. local state was lost but
+# the cluster survived) the check succeeds and bootstrap is skipped, keeping
+# a rebuild apply non-destructive.
+resource "null_resource" "cluster_bootstrap" {
+  triggers = {
+    controller_ip = var.controller_ips[0]
+    config_hash   = data.talos_client_configuration.this.talos_config
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["/bin/bash", "-c"]
+    command     = <<-EOT
+      if talosctl --talosconfig="${local.talos_config_path}" \
+        -n ${var.controller_ips[0]} etcd status >/dev/null 2>&1; then
+        echo "Cluster is already bootstrapped, skipping bootstrap"
+        exit 0
+      fi
+
+      echo "Bootstrapping the cluster via ${var.controller_ips[0]}..."
+      talosctl --talosconfig="${local.talos_config_path}" \
+        -n ${var.controller_ips[0]} bootstrap
+    EOT
+  }
+
+  depends_on = [
+    null_resource.talos_config,
+    talos_machine_configuration_apply.controller,
+    null_resource.wait_for_nodes,
+  ]
 }
 
 # Collect the kubeconfig of the Talos cluster created
 resource "talos_cluster_kubeconfig" "this" {
   depends_on = [
-    talos_machine_bootstrap.this,
+    null_resource.cluster_bootstrap,
     null_resource.cluster_health,
   ]
   client_configuration = talos_machine_secrets.this.client_configuration
@@ -129,17 +154,40 @@ resource "null_resource" "kubeconfig" {
   depends_on = [talos_cluster_kubeconfig.this]
 }
 
-# Set a sleep condition and afterwards check the Health status of the Talos cluster
-resource "null_resource" "wait_for_agent" {
+# Wait until the Talos API on every node answers before touching the cluster.
+# A fixed sleep does not survive slow boots, so poll with a bounded retry.
+resource "null_resource" "wait_for_nodes" {
   provisioner "local-exec" {
     interpreter = ["/bin/bash", "-c"]
-    command     = <<EOT
-      echo "Waiting for QEMU Guest Agent to be operational..."
-      sleep 90
+    command     = <<-EOT
+      MAX_ATTEMPTS=60
+      SLEEP_INTERVAL=10
+
+      for node in ${join(" ", concat(var.controller_ips, [for w in var.workers : w.ip]))}; do
+        echo "Waiting for Talos API on $node..."
+        UP=0
+        for i in $(seq 1 $MAX_ATTEMPTS); do
+          if talosctl --talosconfig="${local.talos_config_path}" \
+            -n "$node" version >/dev/null 2>&1; then
+            echo "Node $node is up (attempt $i/$MAX_ATTEMPTS)"
+            UP=1
+            break
+          fi
+          sleep $SLEEP_INTERVAL
+        done
+
+        if [ "$UP" != "1" ]; then
+          echo "ERROR: Node $node did not become reachable within $((MAX_ATTEMPTS * SLEEP_INTERVAL))s"
+          exit 1
+        fi
+      done
+
+      echo "All nodes are reachable"
     EOT
   }
 
   depends_on = [
+    null_resource.talos_config,
     talos_machine_configuration_apply.controller,
     talos_machine_configuration_apply.worker,
   ]
@@ -247,8 +295,8 @@ resource "null_resource" "cluster_health" {
 
   depends_on = [
     null_resource.talos_config,
-    talos_machine_bootstrap.this,
-    null_resource.wait_for_agent,
+    null_resource.cluster_bootstrap,
+    null_resource.wait_for_nodes,
   ]
 }
 
