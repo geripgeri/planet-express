@@ -23,7 +23,9 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v9.0.0
         with:
-          version: "latest"
+          # Pinned: `uv audit` only exists from 0.10.12 on. "latest" is a
+          # moving target and briefly broke when uv 0.9.x hid the command.
+          version: "0.11.15"
           # Enable caching of the uv cache
           enable-cache: true
 
