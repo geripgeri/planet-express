@@ -25,7 +25,7 @@ jobs:
         with:
           # Pinned: `uv audit` only exists from 0.10.12 on. "latest" is a
           # moving target and briefly broke when uv 0.9.x hid the command.
-          version: "0.11.15"
+          version: "0.12.3"
           # Enable caching of the uv cache
           enable-cache: true
 
