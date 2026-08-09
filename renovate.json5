@@ -124,7 +124,9 @@
       "automerge": true
     },
     // Guard: Talos/Kubernetes upgrades NEVER auto-merge. Declared after the
-    // automerge rules so automerge:false wins. Follow docs/runbooks/talos-k8s-upgrade.md.
+    // automerge rules so automerge:false wins.
+    // Follow docs/runbooks/talos-k8s-upgrade.md (upgrade flow)
+    // and docs/runbooks/renovate-config-edit.md (validating config changes).
     {
       "matchManagers": ["custom.regex"],
       "matchPackageNames": ["siderolabs/talos", "kubernetes/kubernetes"],
