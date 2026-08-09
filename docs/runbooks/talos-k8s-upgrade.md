@@ -22,13 +22,28 @@ talosctl version
 
 ## 2. Update version pins
 
+Talos minor and Kubernetes minor must land in **separate applies** (two
+commits). This module applies the new machine config *before* running the
+Talos upgrade, and a node still on the old Talos rejects configs whose
+Kubernetes version is outside its support range
+(e.g. `version of Kubernetes 1.36.2 is too new to be used with Talos 1.12.4`).
+
+1. Phase 1 — bump only `version` (e.g. `v1.13.8`), keep `kubernetes_version`
+   on the currently running release (e.g. `1.35.0`). Check the support
+   matrix first: the old Talos must accept that Kubernetes version.
+2. Apply, let nodes upgrade to the new Talos.
+3. Phase 2 — bump `kubernetes_version` (e.g. `1.36.2`), apply again.
+
 ```bash
 # edit infrastructure/units/public/talos/talos-cluster/terragrunt.hcl
+# phase 1:
 #   version            = "v1.13.8"
+#   kubernetes_version = "1.35.0"     # unchanged, still accepted by old Talos
+# phase 2 (after apply):
 #   kubernetes_version = "1.36.2"
 ```
 
-Commit + push + merge (normal PR flow), then pull `main`.
+Commit + push + merge per phase (normal PR flow), then pull `main`.
 
 ## 3. Plan
 
