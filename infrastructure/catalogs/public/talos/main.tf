@@ -342,3 +342,74 @@ resource "null_resource" "wait_for_nodes_ready" {
     null_resource.cluster_health,
   ]
 }
+
+# Final convergence check: fail the apply if any node did not reach the
+# expected Talos or Kubernetes version. The upgrades use
+# `talosctl upgrade --wait=false`, which returns as soon as the RPC is
+# acked while the node installs/reboots in the background — a green apply
+# used to hide nodes whose background upgrade died (see
+# docs/runbooks/talos-k8s-upgrade.md §5b).
+resource "null_resource" "verify_upgrade" {
+  triggers = {
+    talos_version      = var.talos_cluster_details.version
+    kubernetes_version = var.talos_cluster_details.kubernetes_version
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["/bin/bash", "-c"]
+    command     = <<-EOT
+      NODES="${join(" ", concat(var.controller_ips, [for w in var.workers : w.ip]))}"
+      MAX_ATTEMPTS=90
+      SLEEP_INTERVAL=10
+
+      for node in $NODES; do
+        echo "Verifying Talos version on $node..."
+        OK=0
+        for i in $(seq 1 $MAX_ATTEMPTS); do
+          TAG=$(talosctl --talosconfig="${local.talos_config_path}" \
+            -n "$node" version -o json 2>/dev/null \
+            | python3 -c 'import json,sys;print(json.load(sys.stdin).get("server",{}).get("tag",""))' 2>/dev/null)
+          if [ "$TAG" = "${var.talos_cluster_details.version}" ]; then
+            OK=1
+            break
+          fi
+          sleep $SLEEP_INTERVAL
+        done
+
+        if [ "$OK" != "1" ]; then
+          echo "ERROR: node $node still on Talos $TAG (expected ${var.talos_cluster_details.version})" >&2
+          exit 1
+        fi
+        echo "node $node: Talos $TAG OK"
+      done
+
+      EXPECTED_KUBELET="v${var.talos_cluster_details.kubernetes_version}"
+      echo "Waiting for all nodes to report kubelet $EXPECTED_KUBELET and Ready..."
+      for i in $(seq 1 $MAX_ATTEMPTS); do
+        OUT=$(kubectl --kubeconfig="${local.kubeconfig_path}" get nodes --no-headers 2>/dev/null)
+        if [ -z "$OUT" ]; then
+          sleep $SLEEP_INTERVAL
+          continue
+        fi
+        BAD=$(printf '%s\n' "$OUT" | awk -v want="$EXPECTED_KUBELET" \
+          '$2 != "Ready" || $(NF) != want { print $1 " status=" $2 " kubelet=" $(NF) }')
+        [ -z "$BAD" ] && break
+        sleep $SLEEP_INTERVAL
+      done
+
+      if [ -n "$BAD" ]; then
+        echo "ERROR: nodes did not converge on kubelet $EXPECTED_KUBELET within $((MAX_ATTEMPTS * SLEEP_INTERVAL))s:" >&2
+        printf '%s\n' "$BAD" >&2
+        kubectl --kubeconfig="${local.kubeconfig_path}" get nodes >&2
+        exit 1
+      fi
+      echo "All nodes Ready on kubelet $EXPECTED_KUBELET"
+    EOT
+  }
+
+  depends_on = [
+    null_resource.upgrade_controller,
+    null_resource.upgrade_worker,
+    null_resource.kubeconfig,
+  ]
+}
