@@ -25,9 +25,14 @@ locals {
   kubeconfig_path   = pathexpand("~/.kube/${var.talos_cluster_details.name}.yaml")
 }
 
-# Generate machine secrets for Talos cluster
+# Machine secrets are generated once, at bootstrap, and all nodes + every
+# operator talosconfig trust the resulting CAs. They must never be
+# regenerated: deriving talos_version from the current cluster version
+# rotates every CA on each upgrade and locks out all clients with x509
+# errors (see docs/runbooks/talos-k8s-upgrade.md §7). Pin to the
+# bootstrap-time version via machine_secrets_version.
 resource "talos_machine_secrets" "this" {
-  talos_version = var.talos_cluster_details.version
+  talos_version = var.machine_secrets_version
 }
 
 # Minimal schematic for controllers (no extra extensions)

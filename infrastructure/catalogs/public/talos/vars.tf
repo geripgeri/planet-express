@@ -28,6 +28,16 @@ variable "talos_cluster_details" {
   }
 }
 
+variable "machine_secrets_version" {
+  description = "Talos version the machine secrets were generated with (at cluster bootstrap). NEVER change: bumping this regenerates all cluster CAs and invalidates every existing talosconfig (TLS lockout, see docs/runbooks/talos-k8s-upgrade.md)."
+  type        = string
+
+  validation {
+    condition     = can(regex("^v[0-9]+\\.[0-9]+\\.[0-9]+(-[a-zA-Z0-9.-]+)?$", var.machine_secrets_version))
+    error_message = "Version must be a valid semantic version with a leading 'v' (e.g., v1.12.4)."
+  }
+}
+
 variable "controller_ips" {
   description = "List of IPv4 addresses for each Talos controller nodes"
   type        = list(string)

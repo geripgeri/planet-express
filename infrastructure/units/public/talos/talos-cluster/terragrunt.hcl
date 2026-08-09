@@ -22,6 +22,12 @@ inputs = {
     longhorn_disk_size = "100GB"
   }
 
+  # Talos version the cluster was bootstrapped with (v1.12.4). NEVER change:
+  # talos_machine_secrets regenerates when it does, rotating all cluster CAs
+  # and locking out every talosconfig (x509 errors; recovery in
+  # docs/runbooks/talos-k8s-upgrade.md §7).
+  machine_secrets_version = "v1.12.4"
+
   network_config = local.secret_vars.network_config
 
   controller_ips  = [dependency.talos_vms.outputs.ip_addresses["talos-controller-01"]]
