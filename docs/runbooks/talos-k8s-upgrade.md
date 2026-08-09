@@ -11,7 +11,7 @@ Current example: v1.12.4 → v1.13.8, Kubernetes 1.35.0 → 1.36.2.
 - `tofu`, `terragrunt`, `talosctl`, `kubectl` available (tfswitch/tgswitch)
 - Maintenance window; expected downtime: brief per-node service restarts,
   ArgoCD auth breakage (secrets regeneration)
-- `talosctl etcd snapshot` (ADR-015) before starting
+- `talosctl etcd snapshot <path>` (see §4; ADR-015) before starting
 
 ## 1. Verify current state
 
@@ -94,9 +94,10 @@ kubectl -n argocd get applications
 kubectl get nodes                      # NotReady?
 talosctl -n <controller-ip> get machinestatus
 talosctl -n <controller-ip> etcd status
-# Restore control plane:
-talosctl -n <controller-ip> etcd restore /tmp/etcd-before-upgrade.snapshot
-# Full recovery: docs/runbooks/cluster-rebuild.md
+# Recovering a broken control plane node: reimage from installer image and
+# let it rejoin (etcd re-bootstraps; no talosctl etcd restore — talosctl has
+# no restore command, snapshots are archival/inspection only)
+# Full recovery: docs/runbooks/cluster-rebuild.md (GAP: not yet written)
 ```
 
 ## 8. Update docs
