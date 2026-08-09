@@ -211,8 +211,7 @@ resource "null_resource" "upgrade_controller" {
       talosctl upgrade \
         --talosconfig="${local.talos_config_path}" \
         -n ${var.controller_ips[0]} \
-        --image ${data.talos_image_factory_urls.controller.urls.installer} \
-        --wait=false
+        --image ${data.talos_image_factory_urls.controller.urls.installer}
     EOT
   }
 
@@ -237,8 +236,7 @@ resource "null_resource" "upgrade_worker" {
       talosctl upgrade \
         --talosconfig="${local.talos_config_path}" \
         -n ${each.value.ip} \
-        --image ${data.talos_image_factory_urls.worker.urls.installer} \
-        --wait=false
+        --image ${data.talos_image_factory_urls.worker.urls.installer}
     EOT
   }
 
@@ -344,10 +342,9 @@ resource "null_resource" "wait_for_nodes_ready" {
 }
 
 # Final convergence check: fail the apply if any node did not reach the
-# expected Talos or Kubernetes version. The upgrades use
-# `talosctl upgrade --wait=false`, which returns as soon as the RPC is
-# acked while the node installs/reboots in the background — a green apply
-# used to hide nodes whose background upgrade died (see
+# expected Talos or Kubernetes version. Upgrades block until each node
+# reports back, but a reboot race or partial install/rollout could still
+# leave a node stale; this fails the apply instead of hiding it (see
 # docs/runbooks/talos-k8s-upgrade.md §5b).
 resource "null_resource" "verify_upgrade" {
   triggers = {

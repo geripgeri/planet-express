@@ -128,17 +128,16 @@ pinned this no longer occurs in normal upgrades.
 
 Notes:
 
-- Apply order is sequential per resource; nodes upgrade via
-  `null_resource.upgrade_*` (`talosctl upgrade --wait=false`)
+- `talosctl upgrade` blocks until the node reboots and reports the new
+  version, so apply order is sequential per resource — each node upgrades
+  and comes back before the next starts, and failures surface in the apply.
 
-- `--wait=false` returns once the upgrade RPC is acked — the node continues
-  installing/rebooting **in the background**. A green apply or a clean plan
-  does NOT mean the nodes upgraded. Concurrent background upgrades on a
-  single host can silently fail; the failure is invisible to terraform.
+- The final `null_resource.verify_upgrade` still re-checks every node's
+  Talos and Kubernetes version and fails the apply if any node is stale —
+  a belt-and-braces guard against partial installs or k8s rollouts.
 
-- Always verify afterwards (below); for any node still on the old Talos,
-  re-run its upgrade manually, sequentially (workers first, controller
-  last), with the installer image from the plan:
+- For any node that still fails to upgrade, re-run its upgrade manually
+  (workers first, controller last), with the installer image from the plan:
 
   ```bash
   talosctl -n <ip> upgrade \
