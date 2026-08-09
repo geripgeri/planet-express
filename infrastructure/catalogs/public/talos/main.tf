@@ -79,89 +79,18 @@ resource "talos_machine_configuration_apply" "worker" {
   node                        = each.value.ip
 }
 
-# Bootstrap the cluster. The etcd status check doubles as an idempotency
-# guard: on an already bootstrapped cluster (e.g. local state was lost but
-# the cluster survived) the check succeeds and bootstrap is skipped, keeping
-# a rebuild apply non-destructive.
+# Bootstrap the cluster. First wait until the Talos API on every node
+# answers (a fixed sleep does not survive slow boots, so poll with a bounded
+# retry). The etcd status check doubles as an idempotency guard: on an
+# already bootstrapped cluster (e.g. local state was lost but the cluster
+# survived) the check succeeds and bootstrap is skipped, keeping a rebuild
+# apply non-destructive.
 resource "null_resource" "cluster_bootstrap" {
   triggers = {
     controller_ip = var.controller_ips[0]
     config_hash   = data.talos_client_configuration.this.talos_config
   }
 
-  provisioner "local-exec" {
-    interpreter = ["/bin/bash", "-c"]
-    command     = <<-EOT
-      if talosctl --talosconfig="${local.talos_config_path}" \
-        -n ${var.controller_ips[0]} etcd status >/dev/null 2>&1; then
-        echo "Cluster is already bootstrapped, skipping bootstrap"
-        exit 0
-      fi
-
-      echo "Bootstrapping the cluster via ${var.controller_ips[0]}..."
-      talosctl --talosconfig="${local.talos_config_path}" \
-        -n ${var.controller_ips[0]} bootstrap
-    EOT
-  }
-
-  depends_on = [
-    null_resource.talos_config,
-    talos_machine_configuration_apply.controller,
-    null_resource.wait_for_nodes,
-  ]
-}
-
-# Collect the kubeconfig of the Talos cluster created
-resource "talos_cluster_kubeconfig" "this" {
-  depends_on = [
-    null_resource.cluster_bootstrap,
-    null_resource.cluster_health,
-  ]
-  client_configuration = talos_machine_secrets.this.client_configuration
-  node                 = var.controller_ips[0]
-}
-
-# Write talos config to a stable path outside .terragrunt-stack
-resource "null_resource" "talos_config" {
-  triggers = {
-    content = sha256(data.talos_client_configuration.this.talos_config)
-  }
-
-  provisioner "local-exec" {
-    interpreter = ["/bin/bash", "-c"]
-    command     = <<-EOT
-      mkdir -p ~/.talos
-      cat > ${local.talos_config_path} << 'YAML'
-      ${data.talos_client_configuration.this.talos_config}
-      YAML
-      chmod 0600 ${local.talos_config_path}
-    EOT
-  }
-}
-
-# Write kubeconfig to a stable path outside .terragrunt-stack
-resource "null_resource" "kubeconfig" {
-  triggers = {
-    content = sha256(talos_cluster_kubeconfig.this.kubeconfig_raw)
-  }
-
-  provisioner "local-exec" {
-    interpreter = ["/bin/bash", "-c"]
-    command     = <<-EOT
-      mkdir -p ~/.kube
-      cat > ${local.kubeconfig_path} << 'YAML'
-      ${talos_cluster_kubeconfig.this.kubeconfig_raw}
-      YAML
-      chmod 0600 ${local.kubeconfig_path}
-    EOT
-  }
-
-  depends_on = [talos_cluster_kubeconfig.this]
-}
-
-# Wait until the Talos API on every node answers before touching the cluster.
-# A fixed sleep does not survive slow boots, so poll with a bounded retry.
-resource "null_resource" "wait_for_nodes" {
   provisioner "local-exec" {
     interpreter = ["/bin/bash", "-c"]
     command     = <<-EOT
@@ -187,7 +116,15 @@ resource "null_resource" "wait_for_nodes" {
         fi
       done
 
-      echo "All nodes are reachable"
+      if talosctl --talosconfig="${local.talos_config_path}" \
+        -n ${var.controller_ips[0]} etcd status >/dev/null 2>&1; then
+        echo "Cluster is already bootstrapped, skipping bootstrap"
+        exit 0
+      fi
+
+      echo "Bootstrapping the cluster via ${var.controller_ips[0]}..."
+      talosctl --talosconfig="${local.talos_config_path}" \
+        -n ${var.controller_ips[0]} bootstrap
     EOT
   }
 
@@ -196,6 +133,60 @@ resource "null_resource" "wait_for_nodes" {
     talos_machine_configuration_apply.controller,
     talos_machine_configuration_apply.worker,
   ]
+}
+
+# Collect the kubeconfig of the Talos cluster created
+resource "talos_cluster_kubeconfig" "this" {
+  depends_on = [
+    null_resource.cluster_bootstrap,
+    null_resource.cluster_health,
+  ]
+  client_configuration = talos_machine_secrets.this.client_configuration
+  node                 = var.controller_ips[0]
+}
+
+# Write talos config to a stable path outside .terragrunt-stack and keep the
+# default ~/.talos/config pointing at it
+resource "null_resource" "talos_config" {
+  triggers = {
+    content = sha256(data.talos_client_configuration.this.talos_config)
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["/bin/bash", "-c"]
+    command     = <<-EOT
+      mkdir -p ~/.talos
+      cat > ${local.talos_config_path} << 'YAML'
+      ${data.talos_client_configuration.this.talos_config}
+      YAML
+      chmod 0600 ${local.talos_config_path}
+      ln -sf ${local.talos_config_path} ~/.talos/config
+      echo "Talos config symlinked to ~/.talos/config"
+    EOT
+  }
+}
+
+# Write kubeconfig to a stable path outside .terragrunt-stack and keep the
+# default ~/.kube/config pointing at it
+resource "null_resource" "kubeconfig" {
+  triggers = {
+    content = sha256(talos_cluster_kubeconfig.this.kubeconfig_raw)
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["/bin/bash", "-c"]
+    command     = <<-EOT
+      mkdir -p ~/.kube
+      cat > ${local.kubeconfig_path} << 'YAML'
+      ${talos_cluster_kubeconfig.this.kubeconfig_raw}
+      YAML
+      chmod 0600 ${local.kubeconfig_path}
+      ln -sf ${local.kubeconfig_path} ~/.kube/config
+      echo "Kubeconfig symlinked to ~/.kube/config"
+    EOT
+  }
+
+  depends_on = [talos_cluster_kubeconfig.this]
 }
 
 # Apply changes if needed
@@ -247,36 +238,6 @@ resource "null_resource" "upgrade_worker" {
   ]
 }
 
-# Automatically create and/or update kube and talos configs
-resource "null_resource" "update_configs" {
-  triggers = {
-    kubeconfig    = sha256(talos_cluster_kubeconfig.this.kubeconfig_raw)
-    client_config = sha256(data.talos_client_configuration.this.talos_config)
-  }
-
-  provisioner "local-exec" {
-    interpreter = ["/bin/bash", "-c"]
-    command     = <<EOT
-      ln -sf ${local.kubeconfig_path} ~/.kube/config
-      echo "Kubeconfig symlinked to ~/.kube/config"
-    EOT
-  }
-
-  provisioner "local-exec" {
-    interpreter = ["/bin/bash", "-c"]
-    command     = <<EOT
-      ln -sf ${local.talos_config_path} ~/.talos/config
-      echo "Talos config symlinked to ~/.talos/config"
-    EOT
-  }
-
-  depends_on = [
-    null_resource.kubeconfig,
-    null_resource.talos_config,
-    talos_cluster_kubeconfig.this,
-  ]
-}
-
 # Check whether the Talos cluster is in a healthy state
 resource "null_resource" "cluster_health" {
   provisioner "local-exec" {
@@ -299,45 +260,6 @@ resource "null_resource" "cluster_health" {
   depends_on = [
     null_resource.talos_config,
     null_resource.cluster_bootstrap,
-    null_resource.wait_for_nodes,
-  ]
-}
-
-resource "null_resource" "wait_for_nodes_ready" {
-  provisioner "local-exec" {
-    interpreter = ["/bin/bash", "-c"]
-    command     = <<-EOT
-      EXPECTED_NODES=${length(var.controller_ips) + length(var.workers)}
-      MAX_ATTEMPTS=60
-      SLEEP_INTERVAL=10
-
-      echo "Waiting for $EXPECTED_NODES node(s) to appear..."
-
-      for i in $(seq 1 $MAX_ATTEMPTS); do
-        CURRENT_NODES=$(kubectl get nodes \
-          --no-headers 2>/dev/null \
-          | wc -l | tr -d ' ')
-
-        echo "Attempt $i/$MAX_ATTEMPTS: $CURRENT_NODES/$EXPECTED_NODES nodes registered"
-
-        if [ "$CURRENT_NODES" -ge "$EXPECTED_NODES" ]; then
-          echo "All $EXPECTED_NODES node(s) are registered!"
-          kubectl get nodes
-          exit 0
-        fi
-
-        sleep $SLEEP_INTERVAL
-      done
-
-      echo "ERROR: Timed out after $((MAX_ATTEMPTS * SLEEP_INTERVAL))s waiting for nodes to appear"
-      kubectl get nodes
-      exit 1
-    EOT
-  }
-
-  depends_on = [
-    null_resource.update_configs,
-    null_resource.cluster_health,
   ]
 }
 
