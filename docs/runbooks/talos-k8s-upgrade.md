@@ -11,14 +11,42 @@ Current example: v1.12.4 → v1.13.8, Kubernetes 1.35.0 → 1.36.2.
 - `tofu`, `terragrunt`, `talosctl`, `kubectl` available (tfswitch/tgswitch)
 - Maintenance window; expected downtime: brief per-node service restarts,
   ArgoCD auth breakage (secrets regeneration)
-- `talosctl etcd snapshot <path>` (see §4; ADR-015) before starting
+- `talosctl etcd snapshot <path>` (see §4; [ADR-015](../decisions/ADR-015-disaster-recovery.md)) before starting
 
-## 1. Verify current state
+## 1. Back up and verify current state
+
+Machine secrets must survive this upgrade unchanged — they are pinned by
+`machine_secrets_version` (see §7). Back everything up first; if the state
+file or the talosconfig is lost, the cluster is unrecoverable without a
+rebuild.
+
+```bash
+# 1. Terraform state (contains all cluster CAs and admin keys)
+cp -a infrastructure/terraform.tfstate.d/talos-cluster/ /tmp/tfstate-backup-$(date +%s)
+
+# 2. talosconfig (root access; mirror the dated-copy convention in ~/.talos)
+cp -a ~/.talos/talos-cluster-01.yaml ~/.talos/talos-cluster-01-$(date +%Y%m%d).yaml
+sha256sum ~/.talos/talos-cluster-01*.yaml | tee /tmp/talosconfig-sha256.txt
+
+# 3. Optional but recommended: Proxmox VM snapshot (fast, zero downtime,
+#    rollback point for every node). Works with qcow2/ZFS/LVM-thin storage.
+for vmid in <controller-vmid> <worker-vmids...>; do
+  qm snapshot $vmid upgrade-pre-$(date +%Y%m%d)
+done
+# Full VM backup instead of snapshot (slower, movable off-host):
+#   vzdump <vmid> --mode snapshot --compress zstd --notes-template "pre-upgrade {{guestname}}"
+```
+
+Then verify current state:
 
 ```bash
 kubectl get nodes -o wide
 talosctl version
 ```
+
+Sanity: `talosctl -n <controller-ip> version` must succeed — if it fails
+with x509 errors the machine secrets were already rotated or the talosconfig
+is gone; see §7 before touching anything.
 
 ## 2. Update version pins
 
@@ -57,9 +85,11 @@ terragrunt plan          # expect: null_resource replaces (upgrade triggers),
 ```
 
 Expected plan (sanity check):
+
 - `-/+` only on `null_resource.*` (installer-image / config-hash triggers)
-- `~` on `talos_machine_secrets`, `talos_cluster_kubeconfig`,
-  `talos_machine_configuration_apply` ×4
+- `~` on `talos_cluster_kubeconfig`, `talos_machine_configuration_apply` ×4
+- `talos_machine_secrets` NOT in plan (version pinned to bootstrap; secrets
+  never regenerate — if it appears, `machine_secrets_version` was bumped)
 - `talos_image_factory_schematic` NOT in plan (IDs are version-independent)
 
 ## 4. Snapshot etcd (before apply)
@@ -93,13 +123,27 @@ config data sources are read during apply, so the provider planned a stale
 State has advanced past the conflict — just re-run `terragrunt apply`
 (second run plans with the new secrets and succeeds).
 Upstream: siderolabs/terraform-provider-talos#352, fixed in provider 0.12.x
-(not in 0.11.0 which this module pins).
+(not in 0.11.0 which this module pins). With `machine_secrets_version`
+pinned this no longer occurs in normal upgrades.
 
 Notes:
+
 - Apply order is sequential per resource; nodes upgrade via
   `null_resource.upgrade_*` (`talosctl upgrade --wait=false`)
-- Machine secrets regenerate → new CA/SA signing key; kubeconfig/talosconfig
-  rewritten to `~/.kube` / `~/.talos`
+
+- `--wait=false` returns once the upgrade RPC is acked — the node continues
+  installing/rebooting **in the background**. A green apply or a clean plan
+  does NOT mean the nodes upgraded. Concurrent background upgrades on a
+  single host can silently fail; the failure is invisible to terraform.
+
+- Always verify afterwards (below); for any node still on the old Talos,
+  re-run its upgrade manually, sequentially (workers first, controller
+  last), with the installer image from the plan:
+
+  ```bash
+  talosctl -n <ip> upgrade \
+    --image factory.talos.dev/metal-installer/<schematic-id>:<version>
+  ```
 
 ## 6. Post-upgrade verification
 
@@ -129,6 +173,48 @@ talosctl -n <controller-ip> etcd status
 # no restore command, snapshots are archival/inspection only)
 # Full recovery: docs/runbooks/cluster-rebuild.md (GAP: not yet written)
 ```
+
+### Machine secrets rotated / TLS lockout (x509 errors)
+
+Symptom: `talos_machine_configuration_apply` fails on every node with
+`x509: certificate signed by unknown authority ... candidate authority certificate "talos"`. Cause: `talos_machine_secrets` was regenerated (its
+`talos_version` changed — this module pins it via `machine_secrets_version`,
+see `infrastructure/catalogs/public/talos/main.tf`), so the provider's
+client certs are signed by a new CA while the nodes still present the
+original one.
+
+Recovery (state surgery, no cluster impact; nodes stay untouched):
+
+1. Confirm a pre-rotation talosconfig still works against the cluster
+   (dated copies in `~/.talos`, e.g. the bootstrap-era one):
+   ```bash
+   TALOSCONFIG=~/.talos/talos-cluster-01-<date>.yaml talosctl -n <ip> version
+   ```
+   No working talosconfig left? Extract the original `machine.ca` cert+key
+   from any node's STATE partition (mount via `qm` disk attach / vzdump
+   archive / rescue ISO) and mint a client cert from the CA key with
+   openssl, then build the talosconfig manually.
+2. Dump the original config from the controller (contains all CA keys):
+   ```bash
+   export TALOSCONFIG=~/.talos/talos-cluster-01-<date>.yaml
+   talosctl -n <controller-ip> get machineconfig v1alpha1 \
+     -o jsonpath='{.spec}' > /tmp/orig-mc.yaml
+   ```
+3. Restore the original secrets into the state file:
+   ```bash
+   uv run python scripts/restore_machine_secrets.py \
+     --state infrastructure/terraform.tfstate.d/talos-cluster/terraform.tfstate \
+     --machine-config /tmp/orig-mc.yaml \
+     --talosconfig ~/.talos/talos-cluster-01-<date>.yaml
+   ```
+   (writes a `.pre-restore.bak` copy; prints only lengths and checksums —
+   the file contains cluster root credentials, keep it local)
+4. `terragrunt plan` — `talos_machine_secrets` must show no changes; then
+   `terragrunt apply` converges.
+
+Afterwards: delete the dumped config (`rm /tmp/orig-mc.yaml` — full CA
+keys), keep the talosconfig dated copies and state backups until the
+upgrade is complete.
 
 ## 8. Update docs
 
