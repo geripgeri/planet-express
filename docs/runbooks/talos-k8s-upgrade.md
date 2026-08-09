@@ -65,6 +65,21 @@ cd infrastructure/units/public/talos/talos-cluster
 terragrunt apply
 ```
 
+Known issue: the first apply may abort with
+
+```
+Error: Provider produced inconsistent final plan
+... invalid new value for .machine_configuration_hash: was ... but now ...
+```
+
+This happens when machine secrets rotate in the same apply: the machine
+config data sources are read during apply, so the provider planned a stale
+`machine_configuration_hash` and OpenTofu rejects the recomputed one.
+State has advanced past the conflict — just re-run `terragrunt apply`
+(second run plans with the new secrets and succeeds).
+Upstream: siderolabs/terraform-provider-talos#352, fixed in provider 0.12.x
+(not in 0.11.0 which this module pins).
+
 Notes:
 - Apply order is sequential per resource; nodes upgrade via
   `null_resource.upgrade_*` (`talosctl upgrade --wait=false`)
