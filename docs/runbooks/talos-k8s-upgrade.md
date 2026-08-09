@@ -122,9 +122,9 @@ config data sources are read during apply, so the provider planned a stale
 `machine_configuration_hash` and OpenTofu rejects the recomputed one.
 State has advanced past the conflict — just re-run `terragrunt apply`
 (second run plans with the new secrets and succeeds).
-Upstream: siderolabs/terraform-provider-talos#352, fixed in provider 0.12.x
-(not in 0.11.0 which this module pins). With `machine_secrets_version`
-pinned this no longer occurs in normal upgrades.
+Upstream: siderolabs/terraform-provider-talos#352, fixed on the provider
+0.12.0 line (alpha releases only; no stable 0.12.x yet). With
+`machine_secrets_version` pinned this no longer occurs in normal upgrades.
 
 Notes:
 
