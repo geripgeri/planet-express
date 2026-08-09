@@ -28,6 +28,31 @@
       "depNameTemplate": "license-year",
       "versioningTemplate": "loose",
       "autoReplaceStringTemplate": "Copyright (c) 2026-{{newValue}}"
+    },
+    // Custom regex managers: flag Talos + Kubernetes version bumps in the
+    // talos-cluster unit. The native terragrunt manager cannot see these —
+    // they are plain strings in `inputs`, not provider/terraform blocks.
+    // Cluster upgrades are manual-only (see the guard rule below).
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^infrastructure\\/units\\/public\\/talos\\/talos-cluster\\/terragrunt\\.hcl$/"],
+      "matchStrings": [
+        "talos_cluster_details\\s*=\\s*\\{[\\s\\S]*?version\\s*=\\s*\"(?<currentValue>v[0-9]+\\.[0-9]+\\.[0-9]+(-[a-zA-Z0-9.-]+)?)\""
+      ],
+      "datasourceTemplate": "github-tags",
+      "depNameTemplate": "siderolabs/talos",
+      "versioningTemplate": "semver"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^infrastructure\\/units\\/public\\/talos\\/talos-cluster\\/terragrunt\\.hcl$/"],
+      "matchStrings": [
+        "kubernetes_version\\s*=\\s*\"(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)\""
+      ],
+      "datasourceTemplate": "github-tags",
+      "depNameTemplate": "kubernetes/kubernetes",
+      "versioningTemplate": "semver",
+      "extractVersionTemplate": "^v(?<version>.*)$"
     }
   ],
   "customDatasources": {
@@ -97,6 +122,15 @@
     {
       "matchUpdateTypes": ["digest", "lockFileMaintenance"],
       "automerge": true
+    },
+    // Guard: Talos/Kubernetes upgrades NEVER auto-merge. Declared after the
+    // automerge rules so automerge:false wins. Follow docs/runbooks/talos-k8s-upgrade.md.
+    {
+      "matchManagers": ["custom.regex"],
+      "matchPackageNames": ["siderolabs/talos", "kubernetes/kubernetes"],
+      "automerge": false,
+      "prPriority": 10,
+      "labels": ["renovate", "cluster-upgrade"]
     }
   ],
   "prHourlyLimit": 2,
