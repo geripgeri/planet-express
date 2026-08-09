@@ -284,10 +284,17 @@ resource "null_resource" "verify_upgrade" {
       for node in $NODES; do
         echo "Verifying Talos version on $node..."
         OK=0
+        LAST_OUT=
         for i in $(seq 1 $MAX_ATTEMPTS); do
-          TAG=$(talosctl --talosconfig="${local.talos_config_path}" \
-            -n "$node" version -o json 2>/dev/null \
-            | python3 -c 'import json,sys;print(json.load(sys.stdin).get("server",{}).get("tag",""))' 2>/dev/null)
+          # Text output is stable across talosctl versions; the JSON form is
+          # protojson of the API message (no `server.tag` key) and `-o json`
+          # is not a registered flag at all. Keep stderr on failure so a
+          # broken probe fails loudly instead of silently (upgrade incident).
+          OUT=$(talosctl --talosconfig="${local.talos_config_path}" \
+            -n "$node" version 2>&1)
+          LAST_OUT="$OUT"
+          TAG=$(printf '%s\n' "$OUT" \
+            | awk '/^Server:/{s=1} s && /^[[:space:]]*Tag:/{print $2; exit}')
           if [ "$TAG" = "${var.talos_cluster_details.version}" ]; then
             OK=1
             break
@@ -296,7 +303,8 @@ resource "null_resource" "verify_upgrade" {
         done
 
         if [ "$OK" != "1" ]; then
-          echo "ERROR: node $node still on Talos $TAG (expected ${var.talos_cluster_details.version})" >&2
+          echo "ERROR: node $node did not reach Talos ${var.talos_cluster_details.version} in time (probe returned '$TAG'); last talosctl output:" >&2
+          printf '%s\n' "$LAST_OUT" >&2
           exit 1
         fi
         echo "node $node: Talos $TAG OK"

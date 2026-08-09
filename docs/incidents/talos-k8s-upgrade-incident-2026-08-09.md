@@ -100,7 +100,12 @@ Full procedure: `docs/runbooks/talos-k8s-upgrade.md` section 7.
   apply.
 - Verify after upgrade: the final `verify_upgrade` step checks every node's
   Talos and Kubernetes version and the kubelet Ready state. A stale node
-  fails the apply.
+  fails the apply. First attempt probed `talosctl version -o json` with a
+  Python one-liner that silently returned an empty tag (no `server.tag` in
+  the JSON, `-o json` not a valid flag, errors swallowed by `2>/dev/null`),
+  so the check failed even though every node had upgraded. The probe now
+  parses the plain-text output with awk and prints the last talosctl output
+  on failure; it no longer depends on `python3` being on the host.
 - Runbook updates: section 1 backups (state, talosconfig, qm snapshot and
   vzdump), section 5b upgrade behavior, section 7 full recovery steps.
 

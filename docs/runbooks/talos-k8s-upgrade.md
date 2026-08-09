@@ -134,7 +134,11 @@ Notes:
 
 - The final `null_resource.verify_upgrade` still re-checks every node's
   Talos and Kubernetes version and fails the apply if any node is stale —
-  a belt-and-braces guard against partial installs or k8s rollouts.
+  a belt-and-braces guard against partial installs or k8s rollouts. It
+  probes the plain-text `talosctl version` output (the JSON form has no
+  `server.tag` key and `-o json` is not a valid flag) and prints the raw
+  talosctl output if a node never converges, so probe failures fail loudly
+  instead of silently.
 
 - For any node that still fails to upgrade, re-run its upgrade manually
   (workers first, controller last), with the installer image from the plan:
