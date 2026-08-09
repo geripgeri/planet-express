@@ -19,7 +19,7 @@ variable "talos_cluster_details" {
 
   validation {
     condition     = can(regex("^[0-9]+\\.[0-9]+\\.[0-9]+$", var.talos_cluster_details.kubernetes_version))
-    error_message = "Kubernetes version must be a valid semantic version (e.g., 1.35.0)."
+    error_message = "Kubernetes version must be a valid semantic version (e.g., 1.36.2)."
   }
 
   validation {

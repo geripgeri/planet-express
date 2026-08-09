@@ -18,7 +18,7 @@ inputs = {
   talos_cluster_details = {
     name               = "talos-cluster-01"
     version            = "v1.13.8"
-    kubernetes_version = "1.35.0"
+    kubernetes_version = "1.36.2"
     longhorn_disk_size = "100GB"
   }
 
