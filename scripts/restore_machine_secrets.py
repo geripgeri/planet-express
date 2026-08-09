@@ -34,7 +34,10 @@ CERT_MAPPING = (
     (("cluster", "secret"), ("cluster", "secret")),
     (("secrets", "bootstrap_token"), ("cluster", "token")),
     (("trustdinfo", "token"), ("machine", "trustdinfo", "token")),
-    (("secrets", "secretbox_encryption_secret"), ("cluster", "secretboxEncryptionSecret")),
+    (
+        ("secrets", "secretbox_encryption_secret"),
+        ("cluster", "secretboxEncryptionSecret"),
+    ),
     (("secrets", "aescbc_encryption_secret"), ("cluster", "aescbcEncryptionSecret")),
 )
 
@@ -67,19 +70,24 @@ def restore(state_path, machine_config_path, talosconfig_path):
     Returns the (updated) machine_secrets attributes. Writes a
     ``<state>.pre-restore.bak`` copy before modifying the state file.
     """
-    docs = [
-        d
-        for d in yaml.safe_load_all(open(machine_config_path))
-        if isinstance(d, dict) and "machine" in d
-    ]
-    if not docs:
+    with open(machine_config_path) as f:
+        machine_config = next(
+            (
+                d
+                for d in yaml.safe_load_all(f)
+                if isinstance(d, dict) and "machine" in d
+            ),
+            None,
+        )
+    if machine_config is None:
         raise ValueError(f"no machine config document found in {machine_config_path}")
-    machine_config = docs[0]
 
-    talosconfig = yaml.safe_load(open(talosconfig_path))
+    with open(talosconfig_path) as f:
+        talosconfig = yaml.safe_load(f)
     context = talosconfig["contexts"][talosconfig["context"]]
 
-    state = json.load(open(state_path))
+    with open(state_path) as f:
+        state = json.load(f)
     for resource in state["resources"]:
         if resource.get("type") == "talos_machine_secrets":
             break
@@ -98,7 +106,8 @@ def restore(state_path, machine_config_path, talosconfig_path):
         client_configuration[target] = context[source]
 
     shutil.copy2(state_path, state_path + ".pre-restore.bak")
-    json.dump(state, open(state_path, "w"), indent=2, sort_keys=True)
+    with open(state_path, "w") as f:
+        json.dump(state, f, indent=2, sort_keys=True)
 
     return attributes
 
@@ -107,10 +116,13 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--state", required=True, help="path to terraform.tfstate")
     parser.add_argument(
-        "--machine-config", required=True,
+        "--machine-config",
+        required=True,
         help="dumped node machine config (talosctl get machineconfig ... -o jsonpath='{.spec}')",
     )
-    parser.add_argument("--talosconfig", required=True, help="pre-rotation talosconfig path")
+    parser.add_argument(
+        "--talosconfig", required=True, help="pre-rotation talosconfig path"
+    )
     args = parser.parse_args()
 
     attributes = restore(args.state, args.machine_config, args.talosconfig)
@@ -120,12 +132,16 @@ def main():
     client = attributes["client_configuration"]
     print(f"talos_version: {attributes['talos_version']}")
     print(f"ca sizes: {len(os_cert)} {len(os_key)}")
-    print(f"ca sha256: {hashlib.sha256(os_cert.encode()).hexdigest()[:16]} "
-          f"{hashlib.sha256(os_key.encode()).hexdigest()[:16]}")
-    print(f"client_configuration sizes: {len(client['ca_certificate'])} "
-          f"{len(client['client_certificate'])} {len(client['client_key'])}")
+    print(
+        f"ca sha256: {hashlib.sha256(os_cert.encode()).hexdigest()[:16]} "
+        f"{hashlib.sha256(os_key.encode()).hexdigest()[:16]}"
+    )
+    print(
+        f"client_configuration sizes: {len(client['ca_certificate'])} "
+        f"{len(client['client_certificate'])} {len(client['client_key'])}"
+    )
     print(f"backup written to {args.state}.pre-restore.bak")
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     main()
