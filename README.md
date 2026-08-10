@@ -4,7 +4,13 @@ A production-grade Kubernetes homelab on a single bare-metal host. Every non-obv
 
 10+ years in Cloud Infrastructure and DevOps, primarily AWS. This is both a learning environment for Kubernetes and a portfolio artifact demonstrating infrastructure thinking. Real workloads, real failures, real documentation.
 
-The public mirror excludes internal network topology (`infrastructure/units/private/mikrotik/`) and apps not ready for public review (`kubernetes/apps/private/`). [SOPS](https://github.com/getsops/sops)-encrypted secrets in public paths are safe — they are ciphertext.
+The public mirror excludes internal network topology (`infrastructure/units/private/mikrotik/`) and apps not ready for public review (`kubernetes/apps/private/`). [SOPS](https://github.com/getsops/sops)-encrypted secrets in public paths are safe, they are ciphertext. The public mirror lives on GitHub.
+
+## AI-Assisted Development
+
+This homelab is developed with AI coding agents ([opencode](https://opencode.ai), Claude) substantially involved: they propose code, configuration, ADRs, and documentation. I direct, review, and approve every change before it reaches `main`, the agents write under the constraints in [AGENTS.md](AGENTS.md), and nothing ships without my check. This is a live system running my real workloads; unvetted output would surface as outages.
+
+I state this plainly because the repo doubles as a portfolio: honesty about the workflow is part of the skill set it demonstrates.
 
 ______________________________________________________________________
 
