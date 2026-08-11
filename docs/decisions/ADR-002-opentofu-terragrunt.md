@@ -26,11 +26,11 @@ One meaningful difference from Terraform: DynamoDB-based state locking is deprec
 
 The three-layer structure:
 
-- **Catalog modules** (`infrastructure/catalogs/`): pure HCL with resource definitions, variables, and outputs. A catalog defines what a Proxmox LXC looks like as code, not which one. Safe to publish publicly; visible in full on the Github and [Codeberg](https://codeberg.org) mirrors.
+- **Catalog modules** (`infrastructure/catalogs/`): pure HCL with resource definitions, variables, and outputs. A catalog defines what a Proxmox LXC looks like as code, not which one. Safe to publish publicly; visible in full on the GitHub mirror.
 - **Units** (`infrastructure/units/`): each unit is a `terragrunt.hcl` that instantiates one catalog module with live values. One unit = one state file. Changing the NFS LXC config cannot touch the Garage LXC state.
 - **Stacks** (`infrastructure/stacks/`): a `terragrunt.stack.hcl` groups related units, declares dependency order, and wires outputs between units. The Garage stack ensures the LXC is applied before buckets, which are applied before keys, and passes the LXC's IP to downstream units without those units needing scattered `dependency` blocks.
 
-The public/private boundary follows this structure: `catalogs/public/` and `units/public/` are mirrored to GitHub and Codeberg; `catalogs/private/` and `units/private/` are excluded via `.gitattributes` export-ignore. Patterns are visible but live configuration is not.
+The public/private boundary follows this structure: `catalogs/public/` and `units/public/` are mirrored to GitHub; `catalogs/private/` and `units/private/` are excluded via `.gitattributes` export-ignore. Patterns are visible but live configuration is not.
 
 ## Alternatives Considered
 
