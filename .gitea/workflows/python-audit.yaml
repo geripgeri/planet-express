@@ -28,6 +28,12 @@ jobs:
           version: "0.12.5"
           # Enable caching of the uv cache
           enable-cache: true
+          # Cache the managed CPython install; without this every job
+          # re-downloads ~34 MiB from releases.astral.sh
+          cache-python: true
+          # releases.astral.sh is slow on this runner's network (~230 KB/s);
+          # fetch uv itself from GitHub Releases instead
+          download-from-astral-mirror: false
 
       - name: Set up Python
         run: uv python install 3.14
