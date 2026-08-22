@@ -28,7 +28,12 @@ inputs = {
   # docs/runbooks/talos-k8s-upgrade.md §7).
   machine_secrets_version = "v1.12.4"
 
-  network_config = local.secret_vars.network_config
+  # secrets.yaml's network_config also carries per-host entries (e.g.
+  # garage_lxc: ip/gw); the catalog variable accepts VLAN maps only, so
+  # select entries by their required attribute.
+  network_config = {
+    for name, cfg in local.secret_vars.network_config : name => cfg if can(cfg.subnet)
+  }
 
   controller_ips  = [dependency.talos_vms.outputs.ip_addresses["talos-controller-01"]]
   controller_vmid = dependency.talos_vms.outputs.vmids["talos-controller-01"]
