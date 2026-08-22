@@ -11,3 +11,14 @@
       tags: [proxmox_base]
     - role: fan_control
       tags: [fan_control]
+
+# Garage LXC guest setup. Runs after the garage-lxc OpenTofu unit provisioned
+# the container and the guest accepts the lxc_admin SSH key.
+# See docs/runbooks/garage-lxc-setup.md for the full bootstrap flow.
+- name: Garage LXC guest setup
+  hosts: lxc
+  gather_facts: true
+
+  roles:
+    - role: garage
+      tags: [garage]

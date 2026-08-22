@@ -1,0 +1,49 @@
+---
+# Garage server version. The binary is a self-contained static musl build;
+# the checksum is pinned so a tampered or truncated download fails fast.
+# Upgrade: bump garage_version and garage_checksum together, verifying the
+# new binary with `--version` and `sha256sum` first (releases are published
+# on garagehq.deuxfleurs.fr / git.deuxfleurs.fr, not GitHub).
+garage_version: "2.3.0"
+garage_checksum: "sha256:f98d317942bb341151a2775162016bb50cf86b865d0108de03eb5db16e2120cd"
+garage_binary_url: "https://garagehq.deuxfleurs.fr/_releases/v{{ garage_version }}/x86_64-unknown-linux-musl/garage"
+garage_binary_dest: /usr/local/bin/garage
+
+garage_user: garage
+# Garage config file. This is the binary's default config path, so the
+# systemd service and the role's `garage` CLI calls read it without a -c
+# flag; the CLI calls pass it explicitly anyway to fail loudly if it moves.
+garage_config_path: /etc/garage.toml
+garage_meta_dir: /var/lib/garage/meta
+garage_data_dir: /var/lib/garage/data
+
+# Network listeners (LAN only; the LXC has no public exposure).
+garage_rpc_bind_addr: "0.0.0.0:3901"
+garage_s3_bind_addr: "0.0.0.0:3900"
+garage_admin_bind_addr: "0.0.0.0:3903"
+garage_s3_region: "garage"
+
+# Recovery safety net: Garage periodically snapshots its metadata database so
+# a corrupted meta db can be rolled back (see the Garage docs on metadata
+# snapshots). 6h trades a few hundred MB of meta dir for a short recovery
+# window on a single-node cluster.
+garage_metadata_snapshot_interval: "6h"
+
+# Cluster layout zone for this node (assigned by the role's layout tasks).
+# Single-node clusters can keep the default; multi-node clusters must set a
+# distinct zone per node before the first apply.
+garage_zone: dc1
+
+# Storage capacity this node contributes to the cluster, as declared in the
+# layout. The garage-lxc unit provisions a 20G disk; Garage uses this value
+# to compute data placement and will refuse to assign a role without it.
+garage_capacity: "20GB"
+
+# Secrets live in ansible/inventory/host_vars/<host>/vault.sops.yaml:
+#   garage_rpc_secret:  32 random bytes as hex (`openssl rand -hex 32`)
+#   garage_admin_token: 32 random bytes as hex, ALSO stored in
+#                       infrastructure/secrets.yaml as `garage.admin_token`
+#                       for the OpenTofu garage provider
+#   garage_metrics_token: 32 random bytes as hex, feeds Prometheus/Grafana
+#                       (ADR-011); `garage metrics` requires it
+# See docs/runbooks/garage-lxc-setup.md for creation steps.

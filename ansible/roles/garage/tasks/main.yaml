@@ -1,0 +1,126 @@
+---
+# Installs the Garage S3 server binary, its config, and its systemd service.
+# Runs against the `lxc` inventory group (bootstrap.yaml) after the LXC is
+# provisioned by the garage-lxc OpenTofu unit and reachable over SSH.
+# See docs/runbooks/garage-lxc-setup.md for the full bootstrap flow.
+
+- name: Download Garage binary
+  ansible.builtin.get_url:
+    url: "{{ garage_binary_url }}"
+    dest: "{{ garage_binary_dest }}"
+    mode: "0755"
+    checksum: "{{ garage_checksum }}"
+    timeout: 120
+  # get_url still performs a live download in check mode; skip it so
+  # --check runs have no side effects.
+  when: not ansible_check_mode
+
+- name: Create garage system user
+  ansible.builtin.user:
+    name: "{{ garage_user }}"
+    system: true
+    shell: /usr/sbin/nologin
+    create_home: false
+
+- name: Create Garage data directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ garage_user }}"
+    group: "{{ garage_user }}"
+    mode: "0750"
+  loop:
+    - "{{ garage_meta_dir }}"
+    - "{{ garage_data_dir }}"
+
+- name: Template Garage configuration
+  ansible.builtin.template:
+    src: garage.toml.j2
+    dest: "{{ garage_config_path }}"
+    owner: root
+    group: "{{ garage_user }}"
+    mode: "0640"
+  notify: Restart garage
+
+- name: Template Garage systemd unit
+  ansible.builtin.template:
+    src: garage.service.j2
+    dest: /etc/systemd/system/garage.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart garage
+
+- name: Enable and start Garage
+  ansible.builtin.systemd:
+    name: garage
+    daemon_reload: true
+    enabled: true
+    state: started
+
+# Smoke check only: `garage node id` derives the node id from the configured
+# RPC secret and succeeds before the cluster layout is applied, so it proves
+# the binary, config, and service are healthy without touching cluster state.
+# The explicit -c makes it read the role's config (and thus fail if the path
+# moves): without a config, `garage node id` silently uses a built-in default
+# secret and would report a node id that never matches the real cluster.
+- name: Smoke-check Garage node id responds
+  ansible.builtin.command: "{{ garage_binary_dest }} -c {{ garage_config_path }} node id"
+  register: garage_node_id
+  retries: 5
+  delay: 2
+  until: garage_node_id.rc == 0
+  changed_when: false
+  when: not ansible_check_mode
+
+# Cluster layout (ADR-010): the node role is assigned and applied once the
+# service is up. `layout show` truncates node ids to 16 hex chars, so the
+# assign guard compares the node id prefix. The apply guard covers both the
+# assign just staged a change and a change staged by a previous failed run.
+# `layout apply` requires the next version number (= current + 1), parsed
+# from the `Current cluster layout version` line of `layout show`.
+- name: Check current cluster layout
+  ansible.builtin.command: "{{ garage_binary_dest }} -c {{ garage_config_path }} layout show"
+  register: garage_layout_show
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Assign garage node role in layout
+  ansible.builtin.command: >-
+    {{ garage_binary_dest }} -c {{ garage_config_path }}
+    layout assign -z {{ garage_zone }} -c {{ garage_capacity }}
+    {{ garage_node_id.stdout }}
+  register: garage_layout_assign
+  changed_when: true
+  when:
+    - not ansible_check_mode
+    - garage_node_id.stdout[:16] not in garage_layout_show.stdout
+
+- name: Determine next cluster layout version
+  ansible.builtin.set_fact:
+    garage_layout_next_version: >-
+      {{ (garage_layout_show.stdout | regex_search('Current cluster layout version: (\d+)', '\1') | first | int) + 1 }}
+  when: not ansible_check_mode
+
+- name: Apply cluster layout
+  ansible.builtin.command: "{{ garage_binary_dest }} -c {{ garage_config_path }} layout apply --version {{ garage_layout_next_version }}"
+  changed_when: true
+  when:
+    - not ansible_check_mode
+    - garage_layout_assign is changed or '==== STAGED ROLE CHANGES ====' in garage_layout_show.stdout
+
+# Confirmation: `garage status` is RPC-based, so it also proves the service
+# accepts connections on the RPC port. The HEALTHY NODES header always
+# prints, so the check requires the node id (truncated to 16 chars, matching
+# the table) to appear while no FAILED NODES section exists; a down node with
+# a role is listed there instead. Retries absorb the first-sync delay.
+- name: Verify Garage cluster is healthy
+  ansible.builtin.command: "{{ garage_binary_dest }} -c {{ garage_config_path }} status"
+  register: garage_status
+  changed_when: false
+  retries: 10
+  delay: 3
+  until:
+    - garage_node_id.stdout[:16] in garage_status.stdout
+    - "'==== FAILED NODES ====' not in garage_status.stdout"
+  when: not ansible_check_mode

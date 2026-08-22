@@ -1,0 +1,20 @@
+# Managed by Ansible (ansible/roles/garage). Do not edit by hand.
+[Unit]
+Description=Garage S3-compatible object storage
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ garage_user }}
+Group={{ garage_user }}
+ExecStart={{ garage_binary_dest }} server
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=full
+ReadWritePaths={{ garage_data_dir }} {{ garage_meta_dir }}
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

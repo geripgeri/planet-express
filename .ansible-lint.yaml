@@ -3,3 +3,4 @@
 
 exclude_paths:
   - inventory/host_vars/zoidberg/vault.sops.yaml
+  - inventory/host_vars/garage-01/vault.sops.yaml

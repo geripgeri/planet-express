@@ -1,6 +1,10 @@
 ---
 # verify.yaml — read-only checks used in CI. Never makes changes.
 # Mirrors bootstrap.yaml but forces --check mode at the play level.
+#
+# Only the proxmox group is verified here. The lxc group is intentionally
+# absent: CI cannot reach the Garage LXC (no route, no key), so guest state
+# is verified manually with `ansible-playbook playbooks/bootstrap.yaml --check`.
 
 - name: Verify Proxmox host desired state (read-only)
   hosts: proxmox

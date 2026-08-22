@@ -1,0 +1,6 @@
+---
+# Shared variables for the `lxc` inventory group: Proxmox LXC guests managed
+# by Ansible. Guests run Debian and are reached as root with the dedicated
+# LXC admin key (ssh_keys.lxc_admin in infrastructure/secrets.yaml).
+ansible_user: root
+ansible_ssh_private_key_file: ~/.ssh/lxc_admin_ed25519

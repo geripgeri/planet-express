@@ -3,3 +3,6 @@ all:
         proxmox:
             hosts:
                 zoidberg:
+        lxc:
+            hosts:
+                garage-01:

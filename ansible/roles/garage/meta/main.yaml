@@ -1,0 +1,15 @@
+---
+galaxy_info:
+  role_name: garage
+  author: Gergely Peidl
+  license: MIT
+  description: >
+    Installs the Garage S3 server (static musl binary), writes its TOML
+    configuration, and manages the systemd service on the Garage LXC guest.
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+
+dependencies: []
