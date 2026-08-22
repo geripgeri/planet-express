@@ -36,6 +36,6 @@ The tooling stack implements these principles directly:
 
 - Every phase has a definition of done tied to the IaC reproducibility goal.
 - The IaC discipline creates real friction: provisioning through OpenTofu is slower than clicking through the Proxmox UI. This is intentional.
-- Known gaps are documented rather than omitted. Local state files under `.terraform.tfstate.d/` are a temporary gap during the Garage S3 migration. Offsite backup for Tier 1 data is a deferred known risk.
+- Known gaps are documented rather than omitted. OpenTofu state now lives in the Garage S3 backend ([ADR-010](ADR-010-garage.md)); the local `terraform.tfstate.d/` copies remain as recovery source until off-site bucket backup deploys. Offsite backup for Tier 1 data is a deferred known risk.
 - Integration tests require a self-hosted runner with network access to Proxmox and the cluster. One runner is registered to Gitea, one to the GitHub mirror. Both runners are free under GitHub's public repository exemption. The public GitHub and Codeberg mirrors both expose the code (Codeberg is a read-only push mirror without CI).
 - Real consequences, such as [cert-manager](https://cert-manager.io/) failures or a [Renovate](https://docs.renovatebot.com/) pull request (PR) breaking workloads, force a genuine understanding of the system. This is the point.

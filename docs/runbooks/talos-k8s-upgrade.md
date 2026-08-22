@@ -21,8 +21,12 @@ file or the talosconfig is lost, the cluster is unrecoverable without a
 rebuild.
 
 ```bash
-# 1. Terraform state (contains all cluster CAs and admin keys)
-cp -a infrastructure/terraform.tfstate.d/talos-cluster/ /tmp/tfstate-backup-$(date +%s)
+# 1. Terraform state (contains all cluster CAs and admin keys). Lives in
+#    Garage S3 now; pull a local copy out of the backend:
+mkdir -p /tmp/tfstate-backup-$(date +%s)
+cd infrastructure/units/public/talos/talos-cluster
+terragrunt state pull > /tmp/tfstate-backup-$(date +%s)/talos-cluster.tfstate
+cd -
 
 # 2. talosconfig (root access; mirror the dated-copy convention in ~/.talos)
 cp -a ~/.talos/talos-cluster-01.yaml ~/.talos/talos-cluster-01-$(date +%Y%m%d).yaml
@@ -203,17 +207,28 @@ Recovery (state surgery, no cluster impact; nodes stay untouched):
    talosctl -n <controller-ip> get machineconfig v1alpha1 \
      -o jsonpath='{.spec}' > /tmp/orig-mc.yaml
    ```
-3. Restore the original secrets into the state file:
+3. Restore the original secrets into the state file. Pull the state from
+   the Garage S3 backend, patch it locally, push it back:
    ```bash
+   cd infrastructure/units/public/talos/talos-cluster
+   terragrunt state pull > /tmp/talos-cluster.tfstate
    uv run python scripts/restore_machine_secrets.py \
-     --state infrastructure/terraform.tfstate.d/talos-cluster/terraform.tfstate \
+     --state /tmp/talos-cluster.tfstate \
      --machine-config /tmp/orig-mc.yaml \
      --talosconfig ~/.talos/talos-cluster-01-<date>.yaml
    ```
-   (writes a `.pre-restore.bak` copy; prints only lengths and checksums —
-   the file contains cluster root credentials, keep it local)
-4. `terragrunt plan` — `talos_machine_secrets` must show no changes; then
-   `terragrunt apply` converges.
+   (writes a `.pre-restore.bak` copy next to the pulled file; prints only
+   lengths and checksums — the file contains cluster root credentials,
+   keep it local)
+4. Push the patched state back, then converge:
+   ```bash
+   tofu state push /tmp/talos-cluster.tfstate
+   terragrunt plan   # talos_machine_secrets must show no changes
+   terragrunt apply
+   rm /tmp/talos-cluster.tfstate
+   ```
+   `state push` refuses on serial mismatch; the pulled file has the latest
+   serial, so retry only makes sense after re-pulling.
 
 Afterwards: delete the dumped config (`rm /tmp/orig-mc.yaml` — full CA
 keys), keep the talosconfig dated copies and state backups until the

@@ -24,3 +24,5 @@ I will run Garage as a Proxmox LXC container and configure it as the S3 backend 
 - The Garage LXC must be treated as a hard dependency and provisioned before other units migrate; its own state bootstrap requires care (local state or a separately maintained state file)
 - One more LXC to operate, monitor, and back up
 - Garage is less mature than MinIO or AWS S3; some S3 API edge cases may surface
+
+Amendment (2026-08-22): migration completed uniformly — bootstrap units included. The `proxmox/garage-lxc` and `garage/tofu-state` units moved to the same backend they provision. This trades the bootstrap circularity concern above against single-backend simplicity, and is acceptable because recovery starts from a restored bucket rather than local files. The planned off-site backup of the bucket contents is not deployed yet; until it lands, recovery relies on the host-local `terraform.tfstate.d/` copies and RPO equals their age (migration runbook §7). Once the repo-managed backup deploys, restore-first becomes the primary recovery path per [ADR-015](ADR-015-disaster-recovery.md) and the bootstrap caveat fully retires.
