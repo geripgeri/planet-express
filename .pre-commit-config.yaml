@@ -71,6 +71,7 @@ repos:
   hooks:
   - id: mdformat
     args: [--number]
+    exclude: ^docs/superpowers/
     # Optionally add plugins
     additional_dependencies:
     - mdformat-gfm
@@ -103,5 +104,6 @@ repos:
       entry: uv run scripts/link_adr.py
       language: system
       files: \.md$
+      exclude: ^docs/superpowers/
       pass_filenames: true
       verbose: true
