@@ -383,6 +383,9 @@ ______________________________________________________________________
 
 - Garage LXC provisioned in Phase 0.9, before any OpenTofu unit migrates state
 - Garage LXC is a hard dependency: its own bootstrap uses local state or a separately maintained state file
+- Garage LXC is provisioned by the `garage-lxc` unit (`infrastructure/units/public/proxmox/garage-lxc/`) via the reusable `lxc` module (`infrastructure/catalogs/public/lxc/`); its static IP lives in `secrets.yaml` under `network_config.garage_lxc` because LXC resources expose no provider-discovered address
+- The guest is installed and configured by the `garage` Ansible role (`ansible/roles/garage/`), applied by `bootstrap.yaml` to the `lxc` inventory group; `docs/runbooks/garage-lxc-setup.md` covers vault creation, the one-time cluster layout bootstrap, and the state bucket/key provisioning flow
+- The state bucket and access key are provisioned by the single `garage/tofu-state` unit (stack `infrastructure/stacks/public/garage/`) via the `schwitzd/garage` provider; `garage.admin_token` in `secrets.yaml` is the shared admin credential
 - Garage is monitored and backed up as part of the LXC operational runbook
 
 **Tags:** storage, infrastructure, bootstrap
