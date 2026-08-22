@@ -63,7 +63,7 @@ terragrunt init -reconfigure
 ```
 
 `-reconfigure` adopts the new backend without offering to copy the stale
-local copy over the freshly renamed remote object. Answer any backend-change
+local copy over the pre-seeded remote object. Answer any backend-change
 prompt with yes.
 
 ## 4. Verify before moving on
@@ -121,8 +121,8 @@ Verify no unit is running before deleting a lockfile.
 
 Off-site backup of this bucket is planned but not deployed yet. Until it
 lands, losing the Garage data volume means restoring state from the
-host-local `terraform.tfstate.d/` tree: rebuild Garage, recreate/rename the
-bucket objects to full-path keys (§2), then continue at §3. RPO equals the
+host-local `terraform.tfstate.d/` tree: rebuild Garage, re-upload the state
+objects as `<unit-basename>/terraform.tfstate` (§2), then continue at §3. RPO equals the
 age of those local files. Deploying the backup solution closes this gap.
 
 ## 8. Rollback

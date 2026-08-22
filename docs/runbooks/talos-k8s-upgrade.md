@@ -223,12 +223,12 @@ Recovery (state surgery, no cluster impact; nodes stay untouched):
 4. Push the patched state back, then converge (from the unit dir):
    ```bash
    cd infrastructure/units/public/talos/talos-cluster
-   tofu state push /tmp/talos-cluster.tfstate
+   terragrunt state push /tmp/talos-cluster.tfstate
    terragrunt plan   # talos_machine_secrets must show no changes
    terragrunt apply
    rm /tmp/talos-cluster.tfstate
    ```
-   `state push` refuses on serial mismatch; the pulled file has the latest
+   `terragrunt state push` refuses on serial mismatch; the pulled file has the latest
    serial, so retry only makes sense after re-pulling.
 
 Afterwards: delete the dumped config (`rm /tmp/orig-mc.yaml` — full CA
