@@ -180,8 +180,8 @@ fail with `InvalidAccessKeyId` / `SignatureDoesNotMatch`. Region must match
 
 ## 6. What this runbook does not cover
 
-- Migrating existing units to the remote Garage state backend: see [ADR-010](../decisions/ADR-010-garage.md);
-  unit-by-unit migration is documented separately
+- Migrating existing units to the remote Garage state backend: see
+  [the migration runbook](tofu-state-migration.md); decision context in [ADR-010](../decisions/ADR-010-garage.md)
 - The rclone snapshot schedule for Garage data (rulebook rule OBJ-02):
   destination and cadence are still to be defined (TODO in the rulebook)
 - Garage upgrades: Renovate raises version-only PRs for `garage_version`
