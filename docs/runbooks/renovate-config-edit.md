@@ -43,6 +43,15 @@ Notes:
   `"replaceString"` showing the exact matched span, and the correct
   `packageFile` (`infrastructure/units/public/talos/talos-cluster/terragrunt.hcl`).
 - Kubernetes manager: `"currentValue": "1.36.2"` + `"extractVersion"` present.
+- Garage manager: `"depName": "Deuxfleurs/garage"`, `"currentValue": "2.3.0"`,
+  `"datasource": "gitea-tags"`, live tag lookup resolves (`sourceUrl`
+  present). The sandbox reaches git.deuxfleurs.fr.
+- Debian LXC template manager: `"depName": "debian-12-standard"`,
+  `"currentValue": "12.12-1"`, correct `replaceString`. The lookup shows
+  `Failed to look up custom.pveam package ... no-result` in the sandbox:
+  download.proxmox.com is not reachable from here. On the host, confirm the
+  same block instead lists releases (no warning) — that proves the html
+  directory-listing scrape works end to end.
 - Guard rule merged: in the resolved config dump, the final
   `packageRules` entry has `"matchPackageNames": ["siderolabs/talos", ...]`,
   `"automerge": false`, `"prPriority": 10`,

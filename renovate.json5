@@ -53,6 +53,53 @@
       "depNameTemplate": "kubernetes/kubernetes",
       "versioningTemplate": "semver",
       "extractVersionTemplate": "^v(?<version>.*)$"
+    },
+    // Custom regex manager: Garage server version pin in the garage Ansible
+    // role. Releases are tagged on the project's own Gitea instance
+    // (git.deuxfleurs.fr); tags carry a v prefix while the pinned value is
+    // bare semver, hence extractVersion. The sha256 checksum line below the
+    // version is intentionally NOT managed: Renovate cannot compute artifact
+    // hashes. Add the new checksum manually in the same PR before merge —
+    // until then the checksum pin makes the next ansible run fail loudly
+    // (see docs/runbooks/garage-lxc-setup.md).
+    // Custom regex manager: Garage server version pin in the garage Ansible
+    // role. Releases are tagged on the project's own Gitea instance
+    // (git.deuxfleurs.fr); tags carry a v prefix while the pinned value is
+    // bare semver, hence extractVersion. The sha256 checksum line below the
+    // version is intentionally NOT managed: Renovate cannot compute artifact
+    // hashes. Add the new checksum manually in the same PR before merge —
+    // until then the checksum pin makes the next ansible run fail loudly
+    // (see docs/runbooks/garage-lxc-setup.md).
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^ansible\\/roles\\/garage\\/defaults\\/main\\.yaml$/"],
+      "matchStrings": [
+        "garage_version:\\s*\"(?<currentValue>\\d+\\.\\d+\\.\\d+)\""
+      ],
+      "datasourceTemplate": "gitea-tags",
+      "registryUrlTemplate": "https://git.deuxfleurs.fr",
+      "depNameTemplate": "Deuxfleurs/garage",
+      "versioningTemplate": "semver",
+      "extractVersionTemplate": "^v(?<version>.*)$"
+    },
+    // Custom regex manager: Debian LXC container template pin in the
+    // proxmox_base Ansible role. The pin has a single source of truth — the
+    // shared OpenTofu include (infrastructure/units/public/proxmox/base.hcl)
+    // reads this line at plan time. Releases come from the Proxmox image
+    // directory listing; Renovate's html format turns every <a href> into a
+    // release and extractVersion keeps only debian-12-standard_*_amd64
+    // files, so Debian major bumps (13.x) stay manual by construction.
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^ansible\\/roles\\/proxmox_base\\/defaults\\/main\\.yaml$/"],
+      "matchStrings": [
+        "proxmox_base_pveam_template:\\s*debian-12-standard_(?<currentValue>\\d+\\.\\d+-\\d+)_amd64\\.tar\\.zst"
+      ],
+      "datasourceTemplate": "custom.pveam",
+      "depNameTemplate": "debian-12-standard",
+      "versioningTemplate": "loose",
+      "extractVersionTemplate": "^debian-12-standard_(?<version>\\d+\\.\\d+-\\d+)_amd64\\.tar\\.zst$",
+      "autoReplaceStringTemplate": "proxmox_base_pveam_template: debian-12-standard_{{{newValue}}}_amd64.tar.zst"
     }
   ],
   "customDatasources": {
@@ -62,6 +109,10 @@
       "transformTemplates": [
         "{'releases': [{'version': $string($.year)}]}"
       ]
+    },
+    "pveam": {
+      "defaultRegistryUrlTemplate": "https://download.proxmox.com/images/system/",
+      "format": "html"
     }
   },
   "packageRules": [
@@ -133,6 +184,18 @@
       "automerge": false,
       "prPriority": 10,
       "labels": ["renovate", "cluster-upgrade"]
+    },
+
+    // Guard: Garage server upgrades NEVER auto-merge. It hosts the OpenTofu
+    // remote state (ADR-010); a bad bump breaks state access for every unit.
+    // The PR also needs the manual sha256 checksum update before merge.
+    // Declared last so automerge:false wins.
+    {
+      "matchManagers": ["custom.regex"],
+      "matchDepNames": ["Deuxfleurs/garage"],
+      "automerge": false,
+      "prPriority": 8,
+      "labels": ["renovate", "garage-upgrade"]
     }
   ],
   "prHourlyLimit": 2,
