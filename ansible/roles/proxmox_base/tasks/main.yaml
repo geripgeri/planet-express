@@ -6,3 +6,7 @@
 - name: Reboot if new kernel was installed
   ansible.builtin.import_tasks: reboot.yaml
   tags: [proxmox_base, reboot]
+
+- name: Ensure Debian LXC base image is present
+  ansible.builtin.import_tasks: pveam.yaml
+  tags: [proxmox_base, pveam]

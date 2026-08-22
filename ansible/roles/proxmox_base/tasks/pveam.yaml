@@ -1,0 +1,27 @@
+---
+# Ensure the Debian LXC base image referenced by the OpenTofu units exists in
+# the host's local storage. The pinned name must match the `ostemplate` pins
+# in infrastructure/units/public/proxmox/*/terragrunt.hcl — bump both
+# together after checking `pveam available --section system` on the host.
+#
+# pveam update only runs when the template is missing: the index refresh is
+# slow and pointless when the image is already present.
+
+- name: Check if Debian LXC template is downloaded
+  ansible.builtin.command: pveam list local
+  register: proxmox_base_pveam_list
+  changed_when: false
+
+- name: Refresh Proxmox template repository index
+  ansible.builtin.command: pveam update
+  changed_when: false
+  when:
+    - not ansible_check_mode
+    - proxmox_base_pveam_template not in proxmox_base_pveam_list.stdout
+
+- name: Download Debian LXC template
+  ansible.builtin.command: pveam download local {{ proxmox_base_pveam_template }}
+  changed_when: true
+  when:
+    - not ansible_check_mode
+    - proxmox_base_pveam_template not in proxmox_base_pveam_list.stdout

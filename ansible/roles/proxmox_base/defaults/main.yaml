@@ -6,3 +6,11 @@ proxmox_base_reboot_timeout: 600
 # How long to wait before attempting to reconnect after reboot (seconds).
 # Gives the host time to start shutting down before Ansible polls.
 proxmox_base_reboot_pre_delay: 15
+
+# Debian LXC base image ensured by the pveam tasks. Single source of truth:
+# infrastructure/units/public/proxmox/base.hcl reads this value for every
+# OpenTofu unit's `ostemplate`, so the two sides cannot drift. Renovate
+# updates this line; check `pveam available --section system` before
+# accepting a bump. Debian major bumps (12 -> 13) change the filename prefix
+# and stay manual.
+proxmox_base_pveam_template: debian-12-standard_12.12-1_amd64.tar.zst
