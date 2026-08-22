@@ -40,6 +40,9 @@ an [ADR](docs/decisions/) explaining what was evaluated, what lost, and why.
 - Don't touch the `.gitattributes` filter list without checking the mirror
   workflow (`.gitea/workflows/mirror.yaml`)
 - Never commit plaintext secrets; sops-encrypt in place
+- Always use RFC 5737 documentation addresses (TEST-NET-1: `192.0.2.0/24`,
+  TEST-NET-2: `198.51.100.0/24`, TEST-NET-3: `203.0.113.0/24`) for example IPs
+  in docs, code comments, and commit messages
 
 ## Development Workflow
 
