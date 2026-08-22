@@ -89,6 +89,13 @@
     // directory listing; Renovate's html format turns every <a href> into a
     // release and extractVersion keeps only debian-12-standard_*_amd64
     // files, so Debian major bumps (13.x) stay manual by construction.
+    // The registry MUST be plain HTTP: download.proxmox.com does not serve
+    // TLS for this hostname by design — HTTPS is reserved for the
+    // subscription-gated enterprise.proxmox.com, and any strict client gets
+    // ERR_TLS_CERT_ALTNAME_INVALID there (the enterprise cert has no
+    // download.proxmox.com SAN). This matches how pveam itself fetches
+    // templates; the pin only selects a filename, image integrity is
+    // enforced where the template is actually downloaded.
     {
       "customType": "regex",
       "managerFilePatterns": ["/^ansible\\/roles\\/proxmox_base\\/defaults\\/main\\.yaml$/"],
@@ -110,8 +117,11 @@
         "{'releases': [{'version': $string($.year)}]}"
       ]
     },
+    // HTTP on purpose — see the pveam custom regex manager above: HTTPS on
+    // download.proxmox.com permanently presents the enterprise.proxmox.com
+    // certificate, which fails hostname verification.
     "pveam": {
-      "defaultRegistryUrlTemplate": "https://download.proxmox.com/images/system/",
+      "defaultRegistryUrlTemplate": "http://download.proxmox.com/images/system/",
       "format": "html"
     }
   },

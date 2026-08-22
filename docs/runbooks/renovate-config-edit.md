@@ -47,11 +47,16 @@ Notes:
   `"datasource": "gitea-tags"`, live tag lookup resolves (`sourceUrl`
   present). The sandbox reaches git.deuxfleurs.fr.
 - Debian LXC template manager: `"depName": "debian-12-standard"`,
-  `"currentValue": "12.12-1"`, correct `replaceString`. The lookup shows
-  `Failed to look up custom.pveam package ... no-result` in the sandbox:
-  download.proxmox.com is not reachable from here. On the host, confirm the
-  same block instead lists releases (no warning) — that proves the html
-  directory-listing scrape works end to end.
+  `"currentValue": "12.12-1"`, correct `replaceString`. The pveam registry is
+  **HTTP on purpose**: download.proxmox.com does not serve TLS for that
+  hostname — HTTPS answers with the enterprise.proxmox.com certificate
+  (`ERR_TLS_CERT_ALTNAME_INVALID`), and Proxmox keeps it that way by design.
+  A `Failed to look up custom.pveam package ... no-result` warning means the
+  fetch failed at all, not just TLS: Renovate swallows every custom-datasource
+  fetch error into a null result, which surfaces as `no-result`. The sandbox
+  additionally blocks port 80 by policy, so this lookup stays a known warning
+  here; on the host/runner confirm the warning disappears and the debug log
+  lists debian-12-standard releases for the manager.
 - Guard rule merged: in the resolved config dump, the final
   `packageRules` entry has `"matchPackageNames": ["siderolabs/talos", ...]`,
   `"automerge": false`, `"prPriority": 10`,
