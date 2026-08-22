@@ -35,6 +35,24 @@ an [ADR](docs/decisions/) explaining what was evaluated, what lost, and why.
 
 ## Conventions
 
+### Terragrunt stacks
+
+- Stack runs copy units into `stacks/*/.terragrunt-stack/<path>/`. Configs
+  there resolve paths from their generated location: reference shared
+  includes and `read_terragrunt_config` targets by repo-root path
+  (`${get_repo_root()}/infrastructure/units/...`), never with
+  `find_in_parent_folders`
+- Unit `path` values in `terragrunt.stack.hcl` mirror the `units/` tree
+  nesting (e.g. `proxmox/talos-vms`), so relative `dependency.config_path`
+  values between units stay valid inside `.terragrunt-stack/`
+- Never read values via `include.<label>.locals`; it resolves to null on
+  current Terragrunt releases. Use `read_terragrunt_config` instead
+- Verify stack changes with the full `terragrunt stack run plan`, not just
+  `stack generate` plus per-unit plans: dependency-graph and path bugs only
+  surface in the full run
+
+### General
+
 - Every non-obvious decision gets an ADR; reference it from code/docs
 - Runbooks must reflect actual state; known gaps documented as gaps
 - Don't touch the `.gitattributes` filter list without checking the mirror
