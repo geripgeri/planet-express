@@ -62,14 +62,6 @@
     // hashes. Add the new checksum manually in the same PR before merge —
     // until then the checksum pin makes the next ansible run fail loudly
     // (see docs/runbooks/garage-lxc-setup.md).
-    // Custom regex manager: Garage server version pin in the garage Ansible
-    // role. Releases are tagged on the project's own Gitea instance
-    // (git.deuxfleurs.fr); tags carry a v prefix while the pinned value is
-    // bare semver, hence extractVersion. The sha256 checksum line below the
-    // version is intentionally NOT managed: Renovate cannot compute artifact
-    // hashes. Add the new checksum manually in the same PR before merge —
-    // until then the checksum pin makes the next ansible run fail loudly
-    // (see docs/runbooks/garage-lxc-setup.md).
     {
       "customType": "regex",
       "managerFilePatterns": ["/^ansible\\/roles\\/garage\\/defaults\\/main\\.yaml$/"],
