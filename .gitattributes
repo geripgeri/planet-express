@@ -4,3 +4,8 @@ infrastructure/units/private/      export-ignore
 kubernetes/apps/private/           export-ignore
 kubernetes/infrastructure/private/ export-ignore
 terraform.tfstate.d/               export-ignore
+# Legacy location of the longhorn manifests (moved to
+# kubernetes/infrastructure/private/network). This entry exists only
+# so the mirror filter scrubs the old public-path history on GitHub.
+# Do not delete while any public mirror history may still reference it.
+kubernetes/infrastructure/longhorn/   export-ignore
