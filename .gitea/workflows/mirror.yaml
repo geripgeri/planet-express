@@ -87,16 +87,30 @@ jobs:
         env:
           RAW_PATHS: ${{ env.RAW_PATHS }}
         run: |
-          # Defense in depth: never trust the filter alone. Fail hard if any
-          # export-ignored path survives anywhere in the rewritten tree.
+          # Defense in depth: never trust the filter alone, and never trust
+          # .gitattributes itself. If a merge drops an export-ignore entry,
+          # the filter silently skips that prefix — the allowlist in
+          # .gitleaks.toml then hides the leak from the scan below. So this
+          # step asserts absence structurally: no path containing a
+          # 'private/' directory segment may survive, regardless of what
+          # .gitattributes claimed should be stripped.
           cd repo.git
           FAIL=0
+
           for p in $RAW_PATHS; do
             if git ls-tree -r --name-only HEAD | grep -qF "$p"; then
               echo "LEAK: '$p' still present after filter"
               FAIL=1
             fi
           done
+
+          LEAKED=$(git ls-tree -r --name-only HEAD | grep -E '(^|/)private/' || true)
+          if [ -n "$LEAKED" ]; then
+            echo "LEAK: 'private/' paths survived filtering (check .gitattributes!):"
+            echo "$LEAKED"
+            FAIL=1
+          fi
+
           if [ "$FAIL" -ne 0 ]; then
             exit 1
           fi
