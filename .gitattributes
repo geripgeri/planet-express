@@ -2,4 +2,5 @@ infrastructure/catalogs/private/   export-ignore
 infrastructure/stacks/private/     export-ignore
 infrastructure/units/private/      export-ignore
 kubernetes/apps/private/           export-ignore
+kubernetes/infrastructure/private/ export-ignore
 terraform.tfstate.d/               export-ignore
