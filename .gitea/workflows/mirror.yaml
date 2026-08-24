@@ -48,9 +48,13 @@ jobs:
         run: |
           # Extract paths marked export-ignore from .gitattributes in the repo.
           # These are the private subtrees that must never reach the public mirror.
+          # tr -d '\r': a CRLF-corrupted .gitattributes would otherwise feed
+          # paths like "kubernetes/apps/private/\r" to filter-repo, which
+          # match no file and silently disable the entire strip.
           RAW_PATHS=$(git -C repo.git show HEAD:.gitattributes \
             | grep 'export-ignore' \
-            | awk '{print $1}')
+            | awk '{print $1}' \
+            | tr -d '\r')
 
           # Guard: abort if the filter list is empty — an empty list would cause
           # filter-repo to be a no-op, pushing the entire unfiltered history.
@@ -62,6 +66,9 @@ jobs:
 
           echo "Private paths to strip:"
           echo "$RAW_PATHS"
+
+          # Reuse in the post-strip verification step.
+          echo "RAW_PATHS=$(echo "$RAW_PATHS" | tr '\n' ' ' | sed 's/ $//')" >> "$GITHUB_ENV"
 
           # Build the filter-repo argument string and store it for the next step.
           # awk emits one --path <value> pair per line, then tr collapses the
@@ -75,6 +82,25 @@ jobs:
           # Word splitting on $FILTER_ARGS is intentional — each token is a separate arg.
           # shellcheck disable=SC2086
           git-filter-repo --invert-paths $FILTER_ARGS --force
+
+      - name: Verify private paths are gone
+        env:
+          RAW_PATHS: ${{ env.RAW_PATHS }}
+        run: |
+          # Defense in depth: never trust the filter alone. Fail hard if any
+          # export-ignored path survives anywhere in the rewritten tree.
+          cd repo.git
+          FAIL=0
+          for p in $RAW_PATHS; do
+            if git ls-tree -r --name-only HEAD | grep -qF "$p"; then
+              echo "LEAK: '$p' still present after filter"
+              FAIL=1
+            fi
+          done
+          if [ "$FAIL" -ne 0 ]; then
+            exit 1
+          fi
+          echo "Verified: no private paths remain in filtered tree."
 
       - name: Scan filtered history for secrets (gitleaks)
         run: |

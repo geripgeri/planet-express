@@ -46,7 +46,10 @@ severity = "high"
 
   [rules.allowlist]
     description = "IP addresses in markdown are documentation examples, not live config"
-    paths = ['''\.md$''']
+    paths = ['''\.md$''', '''^kubernetes/infrastructure/private/''']
+    # ^ The export-ignored private tree carries real topology BY DESIGN
+    # (ADR-021): Cilium IP pools, LAN CIDRs, VPN zone policy. It never
+    # reaches the public mirror, so scanning it only yields false positives.
 
 # Rule 2: Block Public IPs (External Exposure)
 # These reveal external endpoints, potentially exposing attack surfaces.
@@ -63,4 +66,4 @@ severity = "medium"
 
   [rules.allowlist]
     description = "IP addresses in markdown are documentation examples, not live config"
-    paths = ['''\.md$''']
+    paths = ['''\.md$''', '''^kubernetes/infrastructure/private/''']
