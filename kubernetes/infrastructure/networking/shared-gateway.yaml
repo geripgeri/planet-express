@@ -1,0 +1,38 @@
+# Shared Gateway — one wildcard gateway for every current and future
+# subdomain. Per-app hostnames stay out of listener config entirely.
+# allowedRoutes from All lets routes attach cross-namespace (no ReferenceGrant
+# needed for parentRefs; the TLS secret is in this same namespace anyway).
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: shared-gateway
+  namespace: kube-system
+  annotations:
+    argocd.argoproj.io/compare-options: IgnoreExtraneous
+spec:
+  gatewayClassName: cilium
+  listeners:
+    - name: http
+      port: 80
+      protocol: HTTP
+      hostname: "*.peidl.net"
+      allowedRoutes:
+        kinds:
+          - group: gateway.networking.k8s.io
+            kind: HTTPRoute
+        namespaces:
+          from: All
+    - name: https
+      port: 443
+      protocol: HTTPS
+      hostname: "*.peidl.net"
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: wildcard-tls
+      allowedRoutes:
+        kinds:
+          - group: gateway.networking.k8s.io
+            kind: HTTPRoute
+        namespaces:
+          from: All

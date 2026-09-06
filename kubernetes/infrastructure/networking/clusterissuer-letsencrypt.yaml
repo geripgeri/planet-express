@@ -1,0 +1,21 @@
+# ClusterIssuer — Let's Encrypt production via DNS-01 (Cloudflare).
+# Adapted from the tested tofu cert-manager layer. Provider and domain are
+# public by decision (ADR-021 amendment): cert transparency logs and DNS NS
+# records expose both regardless. The ACME account email is a dedicated
+# address and stays a literal.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-cloudflare
+spec:
+  acme:
+    email: admin@peidl.net
+    server: https://acme-v02.api.letsencrypt.org/directory
+    privateKeySecretRef:
+      name: letsencrypt-cloudflare-account-key
+    solvers:
+      - dns01:
+          cloudflare:
+            apiTokenSecretRef:
+              name: dns01-api-token
+              key: api-token

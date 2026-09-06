@@ -1,0 +1,17 @@
+# Wildcard certificate for *.peidl.net (+ apex), issued by the
+# letsencrypt-cloudflare ClusterIssuer. Lives in kube-system so the secret
+# sits beside the shared Gateway that terminates TLS with it.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: wildcard-peidl-net
+  namespace: kube-system
+spec:
+  secretName: wildcard-tls
+  issuerRef:
+    name: letsencrypt-cloudflare
+    kind: ClusterIssuer
+  commonName: "*.peidl.net"
+  dnsNames:
+    - "*.peidl.net"
+    - peidl.net
