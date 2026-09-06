@@ -150,6 +150,65 @@ def test_restore_missing_optional_fields(state_file, machine_config, talosconfig
     assert attrs["machine_secrets"]["certs"]["os"]["cert"] == "CA-CRT"
 
 
+def test_restore_creates_missing_intermediate_dicts(tmp_path, talosconfig):
+    """
+    Sources present in the machine config must create intermediate
+    machine_secrets dicts (cluster, secrets) when the state does not already
+    carry them.
+    """
+    state_path = tmp_path / "state.json"
+    state_path.write_text(
+        json.dumps(
+            {
+                "resources": [
+                    secrets_resource(
+                        {
+                            "talos_version": "v1.13.8",
+                            "client_configuration": {},
+                            "machine_secrets": {
+                                "certs": {"os": {"cert": "OLD", "key": "OLD"}}
+                            },
+                        }
+                    )
+                ]
+            }
+        )
+    )
+    config = tmp_path / "mc.yaml"
+    config.write_text(
+        yaml.safe_dump(
+            {
+                "machine": {"ca": {"crt": "CA-CRT", "key": "CA-KEY"}},
+                "cluster": {
+                    "id": "CLUSTER-ID",
+                    "secretboxEncryptionSecret": "ENC-SECRET",
+                    "aescbcEncryptionSecret": "AESCBC-SECRET",
+                    "ca": {"crt": "K8S-CRT", "key": "K8S-KEY"},
+                },
+            }
+        )
+    )
+
+    restore(str(state_path), str(config), str(talosconfig))
+
+    ms = load_attrs(state_path)["machine_secrets"]
+    assert ms["cluster"]["id"] == "CLUSTER-ID"
+    assert ms["secrets"]["secretbox_encryption_secret"] == "ENC-SECRET"
+    assert ms["secrets"]["aescbc_encryption_secret"] == "AESCBC-SECRET"
+    assert ms["certs"]["k8s"]["cert"] == "K8S-CRT"
+
+
+def test_restore_malformed_talosconfig(tmp_path, state_file, machine_config):
+    """A talosconfig whose context key is missing/unknown is rejected."""
+    config = tmp_path / "talosconfig.yaml"
+    config.write_text(yaml.safe_dump({"context": "missing-context", "contexts": {}}))
+
+    with pytest.raises(
+        ValueError, match=r"malformed talosconfig: missing 'missing-context'"
+    ):
+        restore(str(state_file), str(machine_config), str(config))
+
+
 def test_restore_no_config_document(tmp_path, state_file, talosconfig):
     """A machine config file without a config document is rejected."""
     empty = tmp_path / "empty.yaml"

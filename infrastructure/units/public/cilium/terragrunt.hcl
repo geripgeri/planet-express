@@ -7,14 +7,16 @@ locals {
     "${get_repo_root()}/infrastructure/units/private/cilium-network.hcl"
   )
 
-  # Static controller IP matches proxmox/talos-vms static_ips logic
-  # (cidrhost vlan-10 subnet, .30 for controller). Avoids cross-stack
-  # dependency on talos_vms outputs which breaks stack generation when
-  # cilium lives in a different stack (argocd vs proxmox).
-  vlan10_subnet = local.secret_vars.network_config.vlan-10.subnet
+  # Shared Talos cluster identity + topology: cluster name, kubeconfig
+  # context, controller IP (single source of truth). Avoids re-deriving
+  # cidrhost(vlan-10, 30) here and avoids a cross-stack dependency on
+  # talos_vms outputs which breaks stack generation when cilium lives in a
+  # different stack (argocd vs proxmox).
+  talos_base = read_terragrunt_config("${get_repo_root()}/infrastructure/units/public/talos/base.hcl")
+
   controller_ip = try(
     local.secret_vars.cilium.k8s_service_host,
-    cidrhost(local.vlan10_subnet, 30)
+    local.talos_base.locals.controller_ip
   )
 }
 
@@ -34,13 +36,13 @@ generate "provider" {
     provider "helm" {
       kubernetes = {
         config_path    = "~/.kube/config"
-        config_context = "admin@talos-cluster-01"
+        config_context = "${local.talos_base.locals.k8s_context}"
       }
     }
 
     provider "kubernetes" {
       config_path    = "~/.kube/config"
-      config_context = "admin@talos-cluster-01"
+      config_context = "${local.talos_base.locals.k8s_context}"
     }
   EOF
 }
@@ -52,8 +54,8 @@ inputs = {
 
   # API server host for Cilium k8sServiceHost. Talos cni is none, so Cilium
   # must know the controller IP directly (kubePrism 7445 is not the API).
-  # Derived from secrets network_config like talos-vms static_ips, so the
-  # unit is stack-independent.
+  # Derived from the shared talos/base.hcl topology, so the unit is
+  # stack-independent.
   k8s_service_host = local.controller_ip
 
   # Native routing CIDR lives in the export-ignored private config

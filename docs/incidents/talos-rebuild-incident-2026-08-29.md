@@ -15,6 +15,7 @@ No data was lost. The fix made bootstrap and upgrade idempotent and one-shot.
 ## Timeline
 
 - 2026-08-28: Pin Talos to `v1.13.9`, K8s to `v1.35.8`, Proxmox provider to `3.0.2-rc07`. Add versioned ISO via Ansible.
+- 2026-08-30: Renovate bumps the Proxmox provider `rc08` then `rc09`; both fail fresh VM create with "VM already running" (double-start, Telmate#1542). Fixed by the talos branch pin to `3.0.2-rc10`.
 - 2026-08-29 14:28: `stack run apply` creates 4 VMs. `ip_addresses` output is empty (`""`) for all VMs. Talos `qemu-guest-agent` is no longer in the base image in 1.13.
 - 2026-08-29 19:13: Controller boots 23m11s. `etcd` waits for bootstrap. `talosctl version` shows all 4 nodes on `v1.13.9` even in maintenance mode.
 - 2026-08-29 20:59: `cluster_bootstrap` still creating after 2h49m, waiting for `192.0.2.31`. `etcd status` hangs forever in maintenance mode, so the check never returned.
@@ -51,6 +52,10 @@ Bootstrap only works once. A second call fails, so the check must be correct.
 
 `verify_upgrade` required `Ready` and kubelet version. Talos has `cni: none` and proxy disabled, so nodes stay `NotReady` until Cilium is deployed. The check would always fail on a fresh cluster.
 
+### 7. Proxmox provider double-start on fresh create
+
+The telmate `proxmox` provider at `rc08`/`rc09` issues a second start on VMs it has just created, failing fresh creates with "VM already running" (Telmate/terraform-provider-proxmox#1542). This made provisioning non-idempotent: the first apply half-creates a VM, and a re-run cannot start it. The incident pinned `rc07`, then Renovate drifted it to `rc09`; neither documented why the provider pin mattered, so the regression went unnoticed until `stack run apply` was exercised.
+
 ## Detection
 
 - `ip_addresses = ""` for all VMs after `talos-vms` apply.
@@ -68,6 +73,7 @@ Bootstrap only works once. A second call fails, so the check must be correct.
 - Make `cluster_health` retry `get machinestatus` per node.
 - Make `rolling_upgrade` wait for each node, skip if already on `v1.13.9`, wait after reboot. Controller last.
 - Change `verify_upgrade` to check only kubelet version, not `Ready`.
+- Pin the Proxmox provider to `3.0.2-rc10`, which fixes the "VM already running" double-start on fresh create (Telmate/terraform-provider-proxmox#1542). The pin carries a `# rc10 fixed...` comment in `infrastructure/catalogs/public/proxmox-vm/main.tf` so Renovate cannot silently drift it past the broken `rc08`/`rc09`.
 
 Result: `stack run apply` now bootstraps in 1m56s, `etcd` healthy, all 4 Talos nodes on `v1.13.9`.
 
@@ -81,6 +87,7 @@ Result: `stack run apply` now bootstraps in 1m56s, `etcd` healthy, all 4 Talos n
 - Do not rely on guest agent for IPs on Talos. Pass static reservations through outputs.
 - Keep versioned ISOs and prune old ones.
 - Factory ISO contains the agent. Plain `metal` ISO does not in 1.13. Test both.
+- A provider pin is only a fix if the reason is stated in code. The `rc08`/`rc09` regression rode Renovate untested because the `rc07` pin had no comment; a version bump that lacks a `# why` must be treated as suspect until a fresh `stack run apply` passes.
 
 ## Follow-ups
 
