@@ -60,6 +60,8 @@ def get_path(mapping, key):
 def set_path(mapping, key, value):
     cur = mapping
     for part in key[:-1]:
+        if part not in cur:
+            cur[part] = {}
         cur = cur[part]
     cur[key[-1]] = value
 
@@ -84,7 +86,12 @@ def restore(state_path, machine_config_path, talosconfig_path):
 
     with open(talosconfig_path) as f:
         talosconfig = yaml.safe_load(f)
-    context = talosconfig["contexts"][talosconfig["context"]]
+    try:
+        context = talosconfig["contexts"][talosconfig["context"]]
+    except KeyError as e:
+        raise ValueError(
+            f"malformed talosconfig: missing {e} in {talosconfig_path}"
+        ) from e
 
     with open(state_path) as f:
         state = json.load(f)

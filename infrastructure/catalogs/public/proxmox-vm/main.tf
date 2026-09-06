@@ -2,8 +2,10 @@ terraform {
   required_version = ">= 1.12.5"
   required_providers {
     proxmox = {
-      source  = "telmate/proxmox"
-      version = "3.0.2-rc09"
+      source = "telmate/proxmox"
+      # rc10 fixed the double-start bug that made rc08/rc09 fail with
+      # "VM already running" on fresh create (Telmate/terraform-provider-proxmox#1542).
+      version = "3.0.2-rc10"
     }
     random = {
       source  = "opentofu/random"
@@ -21,7 +23,7 @@ resource "proxmox_vm_qemu" "this" {
 
   # Basic VM settings here. agent refers to guest agent
   agent         = var.vm_details.agent_number
-  agent_timeout = 60
+  agent_timeout = 15
 
   cpu {
     type    = var.vm_details.cpu_type
@@ -86,7 +88,7 @@ resource "proxmox_vm_qemu" "this" {
       id     = 1
       model  = each.value.vmodel
       bridge = each.value.additional_vnetwork
-      tag    = each.value.vnetwork_tag
+      tag    = each.value.additional_vnetwork_tag
     }
   }
 
@@ -100,7 +102,6 @@ resource "proxmox_vm_qemu" "this" {
 
 
   lifecycle {
-    prevent_destroy = false
     ignore_changes = [
       disks, target_node
     ]

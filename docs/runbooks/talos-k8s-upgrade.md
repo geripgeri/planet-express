@@ -3,6 +3,18 @@
 Upgrade the Talos cluster (Talos minor/patch + Kubernetes minor). Follow top-to-bottom.
 Current example: v1.12.4 → v1.13.8, Kubernetes 1.35.0 → 1.36.2.
 
+## 0. Control-plane sizing requirement
+
+The control-plane node (`talos-controller-01`) must run with at least
+**4 vCPU / 4 GB RAM** (`vcores = 4`, `vram = 4096` in
+`infrastructure/units/public/proxmox/talos-vms/terragrunt.hcl`). A 2 vCPU / 2 GB
+control plane saturates under the Cilium operator reconnect storm and the
+kube-apiserver fails its lease/health checks (observed: 100 % CPU for an hour,
+all control-plane static pods flapping, `cilium-operator` CrashLoopBackOff
+with `Leader election lost`). Verify before an upgrade with
+`kubectl get pods -n kube-system` (operator and agents `Running`, not
+`CrashLoopBackOff`).
+
 ## Prerequisites
 
 - Clean git tree on `main`, pinned versions in
@@ -15,7 +27,7 @@ Current example: v1.12.4 → v1.13.8, Kubernetes 1.35.0 → 1.36.2.
 
 ## 1. Back up and verify current state
 
-Machine secrets must survive this upgrade unchanged — they are pinned by
+Machine secrets must survive this upgrade unchanged - they are pinned by
 `machine_secrets_version` (see §7). Back everything up first; if the state
 file or the talosconfig is lost, the cluster is unrecoverable without a
 rebuild.
@@ -48,7 +60,7 @@ kubectl get nodes -o wide
 talosctl version
 ```
 
-Sanity: `talosctl -n <controller-ip> version` must succeed — if it fails
+Sanity: `talosctl -n <controller-ip> version` must succeed - if it fails
 with x509 errors the machine secrets were already rotated or the talosconfig
 is gone; see §7 before touching anything.
 
@@ -60,11 +72,11 @@ Talos upgrade, and a node still on the old Talos rejects configs whose
 Kubernetes version is outside its support range
 (e.g. `version of Kubernetes 1.36.2 is too new to be used with Talos 1.12.4`).
 
-1. Phase 1 — bump only `version` (e.g. `v1.13.8`), keep `kubernetes_version`
+1. Phase 1 - bump only `version` (e.g. `v1.13.8`), keep `kubernetes_version`
    on the currently running release (e.g. `1.35.0`). Check the support
    matrix first: the old Talos must accept that Kubernetes version.
 2. Apply, let nodes upgrade to the new Talos.
-3. Phase 2 — bump `kubernetes_version` (e.g. `1.36.2`), apply again.
+3. Phase 2 - bump `kubernetes_version` (e.g. `1.36.2`), apply again.
 
 ```bash
 # edit infrastructure/units/public/talos/talos-cluster/terragrunt.hcl
@@ -93,7 +105,7 @@ Expected plan (sanity check):
 - `-/+` only on `null_resource.*` (installer-image / config-hash triggers)
 - `~` on `talos_cluster_kubeconfig`, `talos_machine_configuration_apply` ×4
 - `talos_machine_secrets` NOT in plan (version pinned to bootstrap; secrets
-  never regenerate — if it appears, `machine_secrets_version` was bumped)
+  never regenerate - if it appears, `machine_secrets_version` was bumped)
 - `talos_image_factory_schematic` NOT in plan (IDs are version-independent)
 
 ## 4. Snapshot etcd (before apply)
@@ -124,7 +136,7 @@ Error: Provider produced inconsistent final plan
 This happens when machine secrets rotate in the same apply: the machine
 config data sources are read during apply, so the provider planned a stale
 `machine_configuration_hash` and OpenTofu rejects the recomputed one.
-State has advanced past the conflict — just re-run `terragrunt apply`
+State has advanced past the conflict - just re-run `terragrunt apply`
 (second run plans with the new secrets and succeeds).
 Upstream: siderolabs/terraform-provider-talos#352, fixed on the provider
 0.12.0 line (alpha releases only; no stable 0.12.x yet). With
@@ -133,11 +145,10 @@ Upstream: siderolabs/terraform-provider-talos#352, fixed on the provider
 Notes:
 
 - `talosctl upgrade` blocks until the node reboots and reports the new
-  version, so apply order is sequential per resource — each node upgrades
-  and comes back before the next starts, and failures surface in the apply.
+  version. `null_resource.rolling_upgrade` at `infrastructure/catalogs/public/talos/main.tf:205` loops workers sorted by IP one-by-one then controller last, so only one node is `NotReady,SchedulingDisabled` at a time and workloads reschedule. The old parallel `upgrade_worker` `for_each` (which rebooted all 4 at once) was replaced for this reason. Failures surface in the apply.
 
 - The final `null_resource.verify_upgrade` still re-checks every node's
-  Talos and Kubernetes version and fails the apply if any node is stale —
+  Talos and Kubernetes version and fails the apply if any node is stale -
   a belt-and-braces guard against partial installs or k8s rollouts. It
   probes the plain-text `talosctl version` output (the JSON form has no
   `server.tag` key and `-o json` is not a valid flag) and prints the raw
@@ -170,13 +181,13 @@ kubectl -n argocd get applications
 
 ```bash
 # Revert: roll back version pins, plan, apply (machine config reverts; Talos
-# does not auto-downgrade — downgrade requires reinstall from installer image)
+# does not auto-downgrade - downgrade requires reinstall from installer image)
 # Quick health checks:
 kubectl get nodes                      # NotReady?
 talosctl -n <controller-ip> get machinestatus
 talosctl -n <controller-ip> etcd status
 # Recovering a broken control plane node: reimage from installer image and
-# let it rejoin (etcd re-bootstraps; no talosctl etcd restore — talosctl has
+# let it rejoin (etcd re-bootstraps; no talosctl etcd restore - talosctl has
 # no restore command, snapshots are archival/inspection only)
 # Full recovery: docs/runbooks/cluster-rebuild.md (GAP: not yet written)
 ```
@@ -185,7 +196,7 @@ talosctl -n <controller-ip> etcd status
 
 Symptom: `talos_machine_configuration_apply` fails on every node with
 `x509: certificate signed by unknown authority ... candidate authority certificate "talos"`. Cause: `talos_machine_secrets` was regenerated (its
-`talos_version` changed — this module pins it via `machine_secrets_version`,
+`talos_version` changed - this module pins it via `machine_secrets_version`,
 see `infrastructure/catalogs/public/talos/main.tf`), so the provider's
 client certs are signed by a new CA while the nodes still present the
 original one.
@@ -218,7 +229,7 @@ Recovery (state surgery, no cluster impact; nodes stay untouched):
      --talosconfig ~/.talos/talos-cluster-01-<date>.yaml
    ```
    (writes a `.pre-restore.bak` copy next to the pulled file; prints only
-   lengths and checksums — the file contains cluster root credentials,
+   lengths and checksums - the file contains cluster root credentials,
    keep it local)
 4. Push the patched state back, then converge (from the unit dir):
    ```bash
@@ -231,7 +242,7 @@ Recovery (state surgery, no cluster impact; nodes stay untouched):
    `terragrunt state push` refuses on serial mismatch; the pulled file has the latest
    serial, so retry only makes sense after re-pulling.
 
-Afterwards: delete the dumped config (`rm /tmp/orig-mc.yaml` — full CA
+Afterwards: delete the dumped config (`rm /tmp/orig-mc.yaml` - full CA
 keys), keep the talosconfig dated copies and state backups until the
 upgrade is complete.
 

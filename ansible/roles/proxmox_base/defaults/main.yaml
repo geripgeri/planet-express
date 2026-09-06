@@ -14,3 +14,9 @@ proxmox_base_reboot_pre_delay: 15
 # accepting a bump. Debian major bumps (12 -> 13) change the filename prefix
 # and stay manual.
 proxmox_base_pveam_template: debian-12-standard_12.12-1_amd64.tar.zst
+
+# Talos ISO for VMs. Single source of truth: infrastructure/units/public/proxmox/talos-vms/terragrunt.hcl
+# reads this value for `iso_name`, so both sides cannot drift. Renovate updates this line.
+# Asset URL: https://github.com/siderolabs/talos/releases/download/<version>/metal-amd64.iso
+# Use versioned filename talos-<version>-nocloud-amd64.iso to cache multiple versions on local storage.
+proxmox_base_talos_iso_version: "v1.13.9"

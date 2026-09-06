@@ -20,6 +20,7 @@ variable "vms" {
     vnetwork                 = string
     additional_vnetwork      = string
     vnetwork_tag             = optional(number)
+    additional_vnetwork_tag  = optional(number)
     vcores                   = number
     vram                     = number
     tags                     = string
@@ -41,4 +42,15 @@ variable "vm_details" {
     ipconfig           = string
     nameserver         = string
   })
+}
+
+variable "static_ip_addresses" {
+  description = "Optional static IPv4 addresses per VM key. When set, ip_addresses output returns these instead of default_ipv4_address (qemu-guest-agent). Enables one-shot stack without waiting for guest agent."
+  type        = map(string)
+  default     = {}
+
+  validation {
+    condition     = alltrue([for ip in values(var.static_ip_addresses) : can(regex("^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$", ip))])
+    error_message = "Each static IP must be a valid IPv4 address."
+  }
 }

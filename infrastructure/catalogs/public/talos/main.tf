@@ -94,37 +94,61 @@ resource "null_resource" "cluster_bootstrap" {
   provisioner "local-exec" {
     interpreter = ["/bin/bash", "-c"]
     command     = <<-EOT
-      MAX_ATTEMPTS=60
+      MAX_ATTEMPTS=90
       SLEEP_INTERVAL=10
 
-      for node in ${join(" ", concat(var.controller_ips, [for w in var.workers : w.ip]))}; do
+      # Only wait for controller to be up before bootstrap; workers are
+      # waited for via cluster_health after bootstrap. Waiting for all
+      # nodes before bootstrap adds 3*15m and blocks bootstrap.
+      for node in ${join(" ", var.controller_ips)}; do
         echo "Waiting for Talos API on $node..."
         UP=0
+        LAST_ERR=""
         for i in $(seq 1 $MAX_ATTEMPTS); do
-          if talosctl --talosconfig="${local.talos_config_path}" \
-            -n "$node" version >/dev/null 2>&1; then
+          # Capture output so failures are diagnosable; Talos API may be
+          # down during install/reboot, or TLS may mismatch. Do not hide
+          # errors on the final attempt.
+          if OUT=$(talosctl --talosconfig="${local.talos_config_path}" \
+            -n "$node" version 2>&1); then
             echo "Node $node is up (attempt $i/$MAX_ATTEMPTS)"
             UP=1
             break
+          else
+            LAST_ERR="$OUT"
+            # Log every 6th attempt to avoid spam but keep visibility
+            if [ $((i % 6)) -eq 0 ]; then
+              echo "  attempt $i/$MAX_ATTEMPTS: $OUT" | head -n 5
+            fi
           fi
           sleep $SLEEP_INTERVAL
         done
 
         if [ "$UP" != "1" ]; then
-          echo "ERROR: Node $node did not become reachable within $((MAX_ATTEMPTS * SLEEP_INTERVAL))s"
+          echo "ERROR: Node $node did not become reachable within $((MAX_ATTEMPTS * SLEEP_INTERVAL))s" >&2
+          echo "Last talosctl version error:" >&2
+          printf '%s\n' "$LAST_ERR" >&2
+          echo "Check: talosconfig at ${local.talos_config_path} (endpoints/nodes), network reachability to $node:50000, and VM console via Proxmox (qm terminal $node vmid)." >&2
           exit 1
         fi
       done
 
-      if talosctl --talosconfig="${local.talos_config_path}" \
-        -n ${var.controller_ips[0]} etcd status >/dev/null 2>&1; then
+      # Compare talosctl client vs server version; mismatch (1.13.8 vs 1.13.9) caused hang.
+      CLIENT_TAG=$(talosctl version --client 2>&1 | awk '/Tag:/{print $2; exit}')
+      SERVER_TAG=$(talosctl --talosconfig="${local.talos_config_path}" -n ${var.controller_ips[0]} version 2>&1 | awk '/^Server:/{s=1} s && /Tag:/{print $2; exit}')
+      if [ -n "$CLIENT_TAG" ] && [ -n "$SERVER_TAG" ] && [ "$CLIENT_TAG" != "$SERVER_TAG" ]; then
+        echo "ERROR: talosctl client $CLIENT_TAG != server $SERVER_TAG for ${var.controller_ips[0]}, update talosctl to $SERVER_TAG" >&2
+        exit 1
+      fi
+
+      # etcd status hangs forever in maintenance mode before bootstrap, use timeout.
+      # talosctl version works even in maintenance mode (shows all nodes), so etcd hang + version success = not bootstrapped.
+      if timeout 10 talosctl --talosconfig="${local.talos_config_path}" -n ${var.controller_ips[0]} etcd status >/dev/null 2>&1; then
         echo "Cluster is already bootstrapped, skipping bootstrap"
         exit 0
       fi
 
       echo "Bootstrapping the cluster via ${var.controller_ips[0]}..."
-      talosctl --talosconfig="${local.talos_config_path}" \
-        -n ${var.controller_ips[0]} bootstrap
+      talosctl --talosconfig="${local.talos_config_path}" -n ${var.controller_ips[0]} bootstrap
     EOT
   }
 
@@ -189,50 +213,69 @@ resource "null_resource" "kubeconfig" {
   depends_on = [talos_cluster_kubeconfig.this]
 }
 
-# Apply changes if needed
-resource "null_resource" "upgrade_controller" {
+# Rolling upgrade: workers sorted by IP one-by-one then controller last.
+# Replaces parallel upgrade_controller + upgrade_worker for_each which rebooted all nodes at once.
+resource "null_resource" "rolling_upgrade" {
   triggers = {
-    installer_image = data.talos_image_factory_urls.controller.urls.installer
+    controller_image = data.talos_image_factory_urls.controller.urls.installer
+    worker_image     = data.talos_image_factory_urls.worker.urls.installer
+    worker_ips       = join(",", sort([for k, v in var.workers : v.ip]))
   }
 
   provisioner "local-exec" {
     interpreter = ["/bin/bash", "-c"]
     command     = <<EOT
-      echo "Starting Talos controller upgrade for: ${var.controller_ips[0]}..."
-      talosctl upgrade \
-        --talosconfig="${local.talos_config_path}" \
-        -n ${var.controller_ips[0]} \
-        --image ${data.talos_image_factory_urls.controller.urls.installer}
+      set -e
+      TARGET_VERSION="${var.talos_cluster_details.version}"
+      echo "Rolling upgrade workers (target $TARGET_VERSION)..."
+      IFS=',' read -ra IPS <<< "${self.triggers.worker_ips}"
+      for ip in "$${IPS[@]}"; do
+        if [ -z "$ip" ]; then continue; fi
+        echo "Waiting for $ip to be reachable before upgrade..."
+        for i in $(seq 1 18); do
+          if talosctl --talosconfig="${local.talos_config_path}" -n "$ip" version >/dev/null 2>&1; then
+            break
+          fi
+          echo "  $ip not ready, attempt $i/18, waiting 10s..."
+          sleep 10
+        done
+        CURRENT_TAG=$(talosctl --talosconfig="${local.talos_config_path}" -n "$ip" version 2>&1 | awk '/^Server:/{s=1} s && /Tag:/{print $2; exit}')
+        if [ "$CURRENT_TAG" = "$TARGET_VERSION" ]; then
+          echo "Worker $ip already on $TARGET_VERSION, skipping upgrade"
+          continue
+        fi
+        echo "Upgrading worker $ip from $CURRENT_TAG to $TARGET_VERSION with ${self.triggers.worker_image}..."
+        talosctl --talosconfig="${local.talos_config_path}" -n "$ip" upgrade --image ${self.triggers.worker_image} || echo "Upgrade command for $ip returned non-zero, continuing (may already be upgrading)"
+        echo "Waiting for $ip to reboot after upgrade..."
+        sleep 20
+        for i in $(seq 1 18); do
+          if talosctl --talosconfig="${local.talos_config_path}" -n "$ip" version >/dev/null 2>&1; then
+            echo "Worker $ip back up after upgrade"
+            break
+          fi
+          sleep 10
+        done
+      done
+      echo "Waiting for controller ${var.controller_ips[0]} to be reachable..."
+      for i in $(seq 1 18); do
+        if talosctl --talosconfig="${local.talos_config_path}" -n ${var.controller_ips[0]} version >/dev/null 2>&1; then
+          break
+        fi
+        sleep 10
+      done
+      CONTROLLER_TAG=$(talosctl --talosconfig="${local.talos_config_path}" -n ${var.controller_ips[0]} version 2>&1 | awk '/^Server:/{s=1} s && /Tag:/{print $2; exit}')
+      if [ "$CONTROLLER_TAG" = "$TARGET_VERSION" ]; then
+        echo "Controller already on $TARGET_VERSION, skipping upgrade"
+        exit 0
+      fi
+      echo "Upgrading controller ${var.controller_ips[0]} from $CONTROLLER_TAG to $TARGET_VERSION..."
+      talosctl --talosconfig="${local.talos_config_path}" -n ${var.controller_ips[0]} upgrade --image ${self.triggers.controller_image}
     EOT
   }
 
   depends_on = [
     null_resource.talos_config,
     talos_machine_configuration_apply.controller,
-    null_resource.cluster_health,
-  ]
-}
-
-resource "null_resource" "upgrade_worker" {
-  for_each = var.workers
-
-  triggers = {
-    installer_image = data.talos_image_factory_urls.worker.urls.installer
-  }
-
-  provisioner "local-exec" {
-    interpreter = ["/bin/bash", "-c"]
-    command     = <<EOT
-      echo "Starting Talos worker upgrade for: ${each.value.ip}..."
-      talosctl upgrade \
-        --talosconfig="${local.talos_config_path}" \
-        -n ${each.value.ip} \
-        --image ${data.talos_image_factory_urls.worker.urls.installer}
-    EOT
-  }
-
-  depends_on = [
-    null_resource.talos_config,
     talos_machine_configuration_apply.worker,
     null_resource.cluster_health,
   ]
@@ -248,10 +291,26 @@ resource "null_resource" "cluster_health" {
         -n ${var.controller_ips[0]} \
         etcd status
 
-      echo "Checking all nodes are reachable..."
-      talosctl --talosconfig="${local.talos_config_path}" \
-        -n ${join(",", concat(var.controller_ips, [for w in var.workers : w.ip]))} \
-        get machinestatus
+      echo "Checking all nodes are reachable (with retry for booting workers)..."
+      MAX_ATTEMPTS=18
+      SLEEP_INTERVAL=10
+      NODES="${join(" ", concat(var.controller_ips, [for w in var.workers : w.ip]))}"
+      for node in $NODES; do
+        UP=0
+        for i in $(seq 1 $MAX_ATTEMPTS); do
+          if talosctl --talosconfig="${local.talos_config_path}" -n "$node" get machinestatus >/dev/null 2>&1; then
+            echo "Node $node reachable"
+            UP=1
+            break
+          fi
+          echo "Waiting for $node machinestatus (attempt $i/$MAX_ATTEMPTS)..."
+          sleep $SLEEP_INTERVAL
+        done
+        if [ "$UP" != "1" ]; then
+          echo "ERROR: Node $node not reachable after $((MAX_ATTEMPTS * SLEEP_INTERVAL))s" >&2
+          exit 1
+        fi
+      done
 
       echo "Talos cluster is healthy"
     EOT
@@ -311,16 +370,20 @@ resource "null_resource" "verify_upgrade" {
       done
 
       EXPECTED_KUBELET="v${var.talos_cluster_details.kubernetes_version}"
-      echo "Waiting for all nodes to report kubelet $EXPECTED_KUBELET and Ready..."
+      echo "Waiting for all nodes to report kubelet $EXPECTED_KUBELET (Ready check skipped for CNI none)..."
       for i in $(seq 1 $MAX_ATTEMPTS); do
         OUT=$(kubectl --kubeconfig="${local.kubeconfig_path}" get nodes --no-headers 2>/dev/null)
         if [ -z "$OUT" ]; then
           sleep $SLEEP_INTERVAL
           continue
         fi
+        # Only check kubelet version, not Ready – CNI (cilium) is not installed via Talos (cni: none),
+        # so nodes stay NotReady until ArgoCD deploys Cilium. Ready is checked separately if needed.
         BAD=$(printf '%s\n' "$OUT" | awk -v want="$EXPECTED_KUBELET" \
-          '$2 != "Ready" || $(NF) != want { print $1 " status=" $2 " kubelet=" $(NF) }')
+          '$(NF) != want { print $1 " kubelet=" $(NF) " want=" want }')
         [ -z "$BAD" ] && break
+        # Log status for visibility but don't fail on NotReady alone
+        echo "  waiting kubelet $EXPECTED_KUBELET, current: $BAD (attempt $i/$MAX_ATTEMPTS)" | head -n 5
         sleep $SLEEP_INTERVAL
       done
 
@@ -330,13 +393,13 @@ resource "null_resource" "verify_upgrade" {
         kubectl --kubeconfig="${local.kubeconfig_path}" get nodes >&2
         exit 1
       fi
-      echo "All nodes Ready on kubelet $EXPECTED_KUBELET"
+      echo "All nodes on kubelet $EXPECTED_KUBELET (Ready may still be NotReady until CNI installs)"
+      kubectl --kubeconfig="${local.kubeconfig_path}" get nodes 2>&1 | head -n 20
     EOT
   }
 
   depends_on = [
-    null_resource.upgrade_controller,
-    null_resource.upgrade_worker,
+    null_resource.rolling_upgrade,
     null_resource.kubeconfig,
   ]
 }

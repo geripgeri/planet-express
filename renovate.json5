@@ -9,6 +9,18 @@
   "timezone": "UTC",
   "labels": ["renovate"],
 
+  // ArgoCD manager: bump chart pins in Application manifests
+  // (spec.source.targetRevision when spec.source.chart is set). The default
+  // fileMatch does not cover this repo's layout, so point it at the child
+  // Application manifests explicitly. cert-manager and longhorn chart
+  // versions then ride the normal Renovate loop; automerge follows the
+  // global minor/patch rule. The vendored Gateway API CRDs are NOT managed:
+  // a version bump without re-downloading the upstream bundle would lie,
+  // so that stays a manual re-vendor (see the header comment in the file).
+  "argocd": {
+    "managerFilePatterns": ["/^kubernetes/infrastructure/private/apps/.*\\.yaml$/"]
+  },
+
   // Raise a PR immediately when OSV publishes a vulnerability affecting
   // a resolved version in the lockfile — bypasses minimumReleaseAge.
   "osvVulnerabilityAlerts": true,
@@ -99,6 +111,73 @@
       "versioningTemplate": "loose",
       "extractVersionTemplate": "^debian-12-standard_(?<version>\\d+\\.\\d+-\\d+)_amd64\\.tar\\.zst$",
       "autoReplaceStringTemplate": "proxmox_base_pveam_template: debian-12-standard_{{{newValue}}}_amd64.tar.zst"
+    },
+    // Custom regex manager: Talos ISO version pin in proxmox_base role. Single source with talos-vms terragrunt.
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^ansible\\/roles\\/proxmox_base\\/defaults\\/main\\.yaml$/"],
+      "matchStrings": ["proxmox_base_talos_iso_version:\\s*\"(?<currentValue>v[0-9]+\\.[0-9]+\\.[0-9]+)\""],
+      "datasourceTemplate": "github-tags",
+      "depNameTemplate": "siderolabs/talos",
+      "versioningTemplate": "semver"
+    },
+    // Custom regex manager: Cilium Helm chart version pins in Terraform.
+    // Single source is the catalog vars.tf default + unit terragrunt.hcl pin.
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^infrastructure\\/catalogs\\/public\\/cilium\\/vars\\.tf$/", "/^infrastructure\\/units\\/public\\/cilium\\/terragrunt\\.hcl$/"],
+      "matchStrings": ["cilium_version\\s*=\\s*\"(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)\""],
+      "datasourceTemplate": "github-tags",
+      "depNameTemplate": "cilium/cilium",
+      "versioningTemplate": "semver"
+    },
+    // Custom regex managers: pinned tool versions inside the Gitea Actions
+    // workflows. The built-in github-actions manager covers `uses:` refs,
+    // but binaries installed via curl (terragrunt, gitleaks, trivy) and the
+    // setup-opentofu version input are plain strings no default manager
+    // reads. Each entry maps one pin to its upstream GitHub releases.
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^\\.gitea\\/workflows\\/[^/]+\\.ya?ml$/"],
+      "matchStrings": [
+        "tofu_version:\\s*\"?(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)\"?"
+      ],
+      "datasourceTemplate": "github-tags",
+      "depNameTemplate": "opentofu/opentofu",
+      "versioningTemplate": "semver",
+      "extractVersionTemplate": "^v(?<version>.*)$"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^\\.gitea\\/workflows\\/[^/]+\\.ya?ml$/"],
+      "matchStrings": [
+        "TG_VERSION:\\s*\"?(?<currentValue>v[0-9]+\\.[0-9]+\\.[0-9]+)\"?"
+      ],
+      "datasourceTemplate": "github-tags",
+      "depNameTemplate": "gruntwork-io/terragrunt",
+      "versioningTemplate": "semver"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^\\.gitea\\/workflows\\/[^/]+\\.ya?ml$/"],
+      "matchStrings": [
+        "GITLEAKS_VERSION:\\s*\"?(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)\"?"
+      ],
+      "datasourceTemplate": "github-tags",
+      "depNameTemplate": "gitleaks/gitleaks",
+      "versioningTemplate": "semver",
+      "extractVersionTemplate": "^v(?<version>.*)$"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^\\.gitea\\/workflows\\/[^/]+\\.ya?ml$/"],
+      "matchStrings": [
+        "TRIVY_VERSION:\\s*\"?(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)\"?"
+      ],
+      "datasourceTemplate": "github-tags",
+      "depNameTemplate": "aquasecurity/trivy",
+      "versioningTemplate": "semver",
+      "extractVersionTemplate": "^v(?<version>.*)$"
     }
   ],
   "customDatasources": {
@@ -188,6 +267,17 @@
       "labels": ["renovate", "cluster-upgrade"]
     },
 
+    // Cap Kubernetes at <1.37 until Talos 1.14 is pinned: K8s 1.37 requires
+    // Talos 1.14 per support matrix (talos.dev/v1.12/introduction/support-matrix).
+    // Without this, Renovate proposes 1.37.0 which fails with
+    // "version of Kubernetes 1.37.0 is too new to be used with Talos 1.13.x".
+    // Remove once Talos 1.14 is stable and pinned in talos-cluster/terragrunt.hcl.
+    {
+      "matchManagers": ["custom.regex"],
+      "matchPackageNames": ["kubernetes/kubernetes"],
+      "allowedVersions": "< 1.37.0"
+    },
+
     // Guard: Garage server upgrades NEVER auto-merge. It hosts the OpenTofu
     // remote state (ADR-010); a bad bump breaks state access for every unit.
     // The PR also needs the manual sha256 checksum update before merge.
@@ -198,6 +288,29 @@
       "automerge": false,
       "prPriority": 8,
       "labels": ["renovate", "garage-upgrade"]
+    },
+
+    // Guard: Cilium chart upgrades NEVER auto-merge — CNI is the data plane for
+    // every pod (ADR-005). A bad minor bumps all nodes' BPF programs.
+    {
+      "matchManagers": ["custom.regex"],
+      "matchPackageNames": ["cilium/cilium"],
+      "automerge": false,
+      "prPriority": 9,
+      "labels": ["renovate", "cni-upgrade"]
+    },
+    // Guard: Longhorn chart upgrades NEVER auto-merge — chart minors have
+    // shipped storage-engine behaviour changes, and this chart IS the CSI
+    // driver for every stateful workload (ADR-007). A bad auto-merged bump
+    // lands mid-week with nobody watching. Cert-manager chart minors stay
+    // under the global automerge rule: upstream guarantees API stability
+    // within a minor and the webhook rollout is self-healing.
+    {
+      "matchManagers": ["argocd", "helm"],
+      "matchDepNames": ["longhorn"],
+      "automerge": false,
+      "prPriority": 9,
+      "labels": ["renovate", "storage-upgrade"]
     }
   ],
   "prHourlyLimit": 2,
