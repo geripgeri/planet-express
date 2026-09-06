@@ -3,7 +3,13 @@ import sys
 
 import pytest
 
-from scripts.link_adr import _relpath, build_adr_map, linkify_content, main
+from scripts.link_adr import (
+    _fenced_regions,
+    _relpath,
+    build_adr_map,
+    linkify_content,
+    main,
+)
 
 
 @pytest.fixture
@@ -241,3 +247,125 @@ def test_title_line_adr_unlinked(workspace):
     out = test_md.read_text()
     assert out.splitlines()[0].startswith("# ADR-001:")
     assert "Ref [ADR-001](docs/decisions/ADR-001-base.md)" in out
+
+
+def test_linkify_nested_backtick_fences(tmp_path):
+    """
+    Four-backtick outer fence wrapping a three-backtick inner fence.
+    The old ```.*?``` regex paired outer-open with inner-open, so content
+    between inner-open and the next backtick run got linkified.
+    """
+    adr_dir = tmp_path / "docs" / "decisions"
+    adr_dir.mkdir(parents=True)
+    mapping = {"ADR-001": "ADR-001.md"}
+    source = tmp_path / "README.md"
+
+    text = "````markdown\n```\nSee ADR-001 here\n```\n````\n"
+    assert linkify_content(text, mapping, source, adr_dir) == text
+
+
+def test_linkify_tilde_fences(tmp_path):
+    """Tilde fences protect content like backtick fences."""
+    adr_dir = tmp_path / "docs" / "decisions"
+    adr_dir.mkdir(parents=True)
+    mapping = {"ADR-001": "ADR-001.md"}
+    source = tmp_path / "README.md"
+
+    text = "~~~\nRef ADR-001\n~~~\n"
+    assert linkify_content(text, mapping, source, adr_dir) == text
+
+
+def test_linkify_unclosed_fence_protects_rest_of_file(tmp_path):
+    """An unterminated fence protects everything up to end of input."""
+    adr_dir = tmp_path / "docs" / "decisions"
+    adr_dir.mkdir(parents=True)
+    mapping = {"ADR-001": "ADR-001.md"}
+    source = tmp_path / "README.md"
+
+    text = "```\nRef ADR-001\nand more"
+    assert linkify_content(text, mapping, source, adr_dir) == text
+
+
+def test_linkify_longer_closer_required(tmp_path):
+    """
+    CommonMark rule: closing fence must be at least as long as opener.
+    Three backticks inside a four-backtick fence do NOT close it.
+    """
+    adr_dir = tmp_path / "docs" / "decisions"
+    adr_dir.mkdir(parents=True)
+    mapping = {"ADR-001": "ADR-001.md"}
+    source = tmp_path / "README.md"
+
+    text = "````\nADR-001\n```\nstill fenced\n````\n"
+    assert linkify_content(text, mapping, source, adr_dir) == text
+
+
+def test_linkify_bare_path_reference_untouched(tmp_path):
+    """
+    An ADR id inside a longer hyphenated token (a filename) must not be
+    rewritten. The old lookahead excluded only word chars, so a trailing
+    hyphen let the id match, corrupting docs/decisions/ADR-001-x.md into
+    a broken link.
+    """
+    adr_dir = tmp_path / "docs" / "decisions"
+    adr_dir.mkdir(parents=True)
+    mapping = {"ADR-001": "ADR-001-x.md"}
+    source = tmp_path / "README.md"
+
+    text = "Read docs/decisions/ADR-001-x.md first."
+    assert linkify_content(text, mapping, source, adr_dir) == text
+
+
+def test_linkify_hyphenated_prose_not_linked(tmp_path):
+    """Accepted trade-off: prose suffixes like 'ADR-003-based' stay plain."""
+    adr_dir = tmp_path / "docs" / "decisions"
+    adr_dir.mkdir(parents=True)
+    mapping = {"ADR-003": "ADR-003.md"}
+    source = tmp_path / "README.md"
+
+    text = "an ADR-003-based design"
+    assert linkify_content(text, mapping, source, adr_dir) == text
+
+
+def test_linkify_normal_reference_still_linked(tmp_path):
+    """Boundary tightening must not break normal references."""
+    adr_dir = tmp_path / "docs" / "decisions"
+    adr_dir.mkdir(parents=True)
+    mapping = {"ADR-001": "ADR-001.md"}
+    source = tmp_path / "README.md"
+
+    result = linkify_content("(see ADR-001)", mapping, source, adr_dir)
+    assert result == "(see [ADR-001](docs/decisions/ADR-001.md))"
+
+
+def test_fenced_regions_spans():
+    """
+    Direct span check: 4-backtick fence survives an inner 3-backtick fence.
+    The region starts at the opener and ends at the closer's last fence
+    byte ($ excludes the closer line's trailing newline).
+    """
+    text = "before\n````\nx\n```\ny\n````\nafter"
+    start = len("before\n")
+    end = len(text) - len("\nafter")
+    assert _fenced_regions(text) == [(start, end)]
+
+
+def test_fenced_regions_rejects_reserved_control_bytes():
+    """Control bytes are reserved for mask tokens; input must reject them."""
+    with pytest.raises(ValueError, match="control bytes"):
+        _fenced_regions("text\x00here")
+
+
+def test_fenced_regions_backtick_info_string_with_backtick_is_content():
+    """
+    CommonMark: a backtick opener whose info string contains a backtick is
+    NOT a fence; the line stays regular content (no protected region).
+    """
+    assert _fenced_regions("```abc`def\nADR-001\n") == []
+
+
+def test_fenced_regions_unclosed_fence_runs_to_eof():
+    """An unterminated fence protects everything from its start to the end."""
+    text = "intro\n~~~\nnever closed"
+    start = len("intro\n")
+    assert _fenced_regions(text) == [(start, len(text))]

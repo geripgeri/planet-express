@@ -72,3 +72,11 @@ venv/
 .pytest_cache/
 *.log
 tmp/
+
+# ---> Talos credentials (SEC-02)
+# Cluster root credentials live in the password manager, never in git.
+talosconfig
+**/talosconfig*
+**/secrets.yaml
+# Tracked SOPS-encrypted OpenTofu vars file stays addable.
+!infrastructure/secrets.yaml

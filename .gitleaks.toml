@@ -23,6 +23,10 @@ useDefault = true
     # Carries no topology information; not an endpoint disclosure.
     '''\b0\.0\.0\.0(:\d{1,5})?\b''',
 
+    # IPv4 loopback (e.g. PVE exporter smoke-test URL). Local-only address;
+    # carries no topology information and is not an endpoint disclosure.
+    '''\b127\.0\.0\.1(:\d{1,5})?\b''',
+
     # RFC 5737 documentation addresses (TEST-NET-1/2/3). Reserved for
     # examples in docs and comments; publishing them is their purpose.
     '''\b(192\.0\.2\.\d{1,3}|198\.51\.100\.\d{1,3}|203\.0\.113\.\d{1,3})\b''',
@@ -40,16 +44,30 @@ useDefault = true
 id = "private-ip"
 description = "Detect private IP addresses (RFC 1918) in Terraform and YAML config files"
 regex = '''\b(10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})\b'''
-path = '''\.(tf|hcl|tfvars|yml|yaml)$'''
+path = '''\.(tf|hcl|tfvars|yml|yaml|py)$'''
 tags = ["infrastructure", "network", "privacy"]
 severity = "high"
 
   [rules.allowlist]
     description = "IP addresses in markdown are documentation examples, not live config"
-    paths = ['''\.md$''', '''^kubernetes/infrastructure/private/''']
-    # ^ The export-ignored private tree carries real topology BY DESIGN
-    # (ADR-021): Cilium IP pools, LAN CIDRs, VPN zone policy. It never
-    # reaches the public mirror, so scanning it only yields false positives.
+    paths = [
+      '''\.md$''',
+      '''^kubernetes/infrastructure/private/''',
+      '''^infrastructure/catalogs/private/''',
+      '''^infrastructure/stacks/private/''',
+      '''^infrastructure/units/private/''',
+      # Pre-RFC-5737 test fixture: the talosconfig endpoint used a fake RFC
+      # 1918 address before the neutralization sweep (kept deliberately
+      # literal-free here so this file stays scannable under any path
+      # filter). The file now uses RFC 5737 addresses, but the historical
+      # commits still hold the old fixture. This is allowlisted by PATH, not
+      # by commit: the mirror workflow rewrites every SHA with
+      # git-filter-repo, so a commits= allowlist never matches on the
+      # filtered history.
+      '''^tests/test_restore_machine_secrets\.py$''',
+    ]
+    # ^ paths: export-ignored private trees carry real topology BY DESIGN
+    #   (ADR-021) and never reach the public mirror.
 
 # Rule 2: Block Public IPs (External Exposure)
 # These reveal external endpoints, potentially exposing attack surfaces.
@@ -60,10 +78,60 @@ severity = "high"
 id = "public-ip"
 description = "Detect public IP addresses in Terraform and YAML config files"
 regex = '''\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b'''
-path = '''\.(tf|hcl|tfvars|yml|yaml)$'''
+path = '''\.(tf|hcl|tfvars|yml|yaml|py)$'''
 tags = ["infrastructure", "network", "exposure"]
 severity = "medium"
 
   [rules.allowlist]
     description = "IP addresses in markdown are documentation examples, not live config"
-    paths = ['''\.md$''', '''^kubernetes/infrastructure/private/''']
+    paths = [
+      '''\.md$''',
+      '''^kubernetes/infrastructure/private/''',
+      '''^infrastructure/catalogs/private/''',
+      '''^infrastructure/stacks/private/''',
+      '''^infrastructure/units/private/''',
+      # Pre-RFC-5737 test fixture (see private-ip rule above): path-scoped,
+      # not commit-scoped, because filter-repo invalidates commit SHAs.
+      '''^tests/test_restore_machine_secrets\.py$''',
+    ]
+    # ^ Same historic fixture exempted as under Rule 1; the public-ip rule
+    #   double-triggers on any IPv4, so both need the commit scope.
+# Rule 3: Talos cluster credentials tripwire (SEC-02). A committed talosconfig
+# grants full Talos API access regardless of its content, so the file name
+# alone is the signal.
+[[rules]]
+id = "talosconfig-file"
+description = "Talos config file (talosconfig) committed to git"
+path = '''(^|/)talosconfig(\..*)?$'''
+tags = ["talos", "kubernetes", "credentials"]
+severity = "critical"
+
+# Rule 4: Base64 credential blobs in kubeconfig-style YAML. Catches renamed
+# or dated copies (e.g. talos-cluster-01-<date>.yaml) that the path rule
+# misses. gitleaks uses Go RE2: no lookaheads; (?m) enables per-line matching.
+[[rules]]
+id = "talos-kubeconfig-keydata"
+description = "Base64 CA/cert/key material in kubeconfig-style YAML"
+regex = '''(?m)^\s*(ca|crt|key|certificate-authority-data|client-certificate-data|client-key-data):\s*["']?[A-Za-z0-9+/]{60,}={0,2}["']?\s*$'''
+path = '''\.(ya?ml|json)$'''
+tags = ["talos", "kubernetes", "kubeconfig", "credentials"]
+severity = "critical"
+
+# Rule 5: Talos machine secrets.yaml structural markers. The embedded PEM and
+# base64 values fall under default gitleaks rules; these markers catch the
+# file even with unusual value formatting. The SOPS-encrypted OpenTofu vars
+# file (infrastructure/secrets.yaml) carries none of these markers; the
+# allowlist below documents that intent explicitly.
+[[rules]]
+id = "talos-machine-secrets-yaml"
+description = "Talos machine secrets.yaml structure"
+regex = '''(?m)^trustdinfo:|^\s{0,4}(bootstraptoken|clusterSecret|machinesecret):\s*\S+'''
+path = '''secrets\.ya?ml$'''
+tags = ["talos", "kubernetes", "secrets"]
+severity = "critical"
+
+  [rules.allowlist]
+    description = "SOPS-encrypted values are ciphertext, not plaintext secrets"
+    regexes = [
+      '''ENC\[AES256_GCM,data:''',
+    ]

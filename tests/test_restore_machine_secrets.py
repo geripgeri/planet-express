@@ -79,7 +79,7 @@ def talosconfig(tmp_path):
         "context": "talos-cluster-01",
         "contexts": {
             "talos-cluster-01": {
-                "endpoints": ["192.168.10.30"],
+                "endpoints": ["192.0.2.30"],
                 "ca": "TC-CA",
                 "crt": "TC-CRT",
                 "key": "TC-KEY",

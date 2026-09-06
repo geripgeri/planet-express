@@ -349,7 +349,9 @@ ______________________________________________________________________
 
 - Both files are stored in a password manager; management documented in `docs/runbooks/cluster-rebuild.md`
 - `.gitignore` must include `talosconfig` and `secrets.yaml` globally
-- TODO: add a gitleaks rule matching Talos secret file patterns
+- gitleaks custom rules `talosconfig-file`, `talos-kubeconfig-keydata`, and
+  `talos-machine-secrets-yaml` in `.gitleaks.toml` block Talos credential
+  patterns, including renamed or dated copies
 
 **Tags:** security, kubernetes, secrets
 
