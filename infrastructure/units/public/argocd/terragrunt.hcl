@@ -1,5 +1,11 @@
 locals {
   secret_vars = yamldecode(sops_decrypt_file(find_in_parent_folders("secrets.yaml")))
+
+  # Shared Talos cluster identity + topology: cluster name and kubeconfig
+  # context (single source of truth, see talos/base.hcl). Avoids the literal
+  # "admin@talos-cluster-01" context being re-derived in every unit that
+  # targets the cluster.
+  talos_base = read_terragrunt_config("${get_repo_root()}/infrastructure/units/public/talos/base.hcl")
 }
 
 include "root" {
@@ -22,18 +28,18 @@ generate "provider" {
     provider "helm" {
       kubernetes = {
         config_path    = "~/.kube/config"
-        config_context = "admin@talos-cluster-01"
+        config_context = "${local.talos_base.locals.k8s_context}"
       }
     }
 
     provider "kubernetes" {
       config_path    = "~/.kube/config"
-      config_context = "admin@talos-cluster-01"
+      config_context = "${local.talos_base.locals.k8s_context}"
     }
 
     provider "kubectl" {
       config_path    = "~/.kube/config"
-      config_context = "admin@talos-cluster-01"
+      config_context = "${local.talos_base.locals.k8s_context}"
     }
   EOF
 }
