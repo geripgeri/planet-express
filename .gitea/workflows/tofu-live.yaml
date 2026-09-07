@@ -46,3 +46,26 @@ jobs:
             tofu -chdir="$harness" test
             echo "::endgroup::"
           done
+
+  sweep:
+    needs: live
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Destroy leftover tftest guests older than 6h
+        env:
+          PROXMOX_API_URL: ${{ secrets.PROXMOX_API_URL }}
+          PROXMOX_API_TOKEN_ID: ${{ secrets.PROXMOX_API_TOKEN_ID }}
+          PROXMOX_API_TOKEN: ${{ secrets.PROXMOX_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          python3 scripts/ci_sweep_test_guests.py \
+            --base-url "$PROXMOX_API_URL" \
+            --token-id "$PROXMOX_API_TOKEN_ID" \
+            --token-secret "$PROXMOX_API_TOKEN" \
+            --max-age-hours 6
