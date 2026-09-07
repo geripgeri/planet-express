@@ -2,7 +2,9 @@ terraform {
   required_version = ">= 1.12.5"
   required_providers {
     proxmox = {
-      source  = "telmate/proxmox"
+      source = "telmate/proxmox"
+      # rc10 fixed the double-start bug that made rc08/rc09 fail with
+      # "VM already running" on fresh create (Telmate/terraform-provider-proxmox#1542).
       version = "3.0.2-rc10"
     }
   }

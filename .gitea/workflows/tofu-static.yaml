@@ -1,0 +1,64 @@
+name: Tofu Static
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'infrastructure/**'
+      - '.gitea/workflows/tofu-static.yaml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'infrastructure/**'
+      - '.gitea/workflows/tofu-static.yaml'
+
+permissions:
+  contents: read
+
+jobs:
+  static:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up OpenTofu
+        uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: 1.12.5
+
+      - name: Set up tflint
+        uses: terraform-linters/setup-tflint@v6
+
+      - name: Install trivy
+        run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+
+      - name: Format check
+        run: tofu fmt -check -recursive infrastructure/catalogs
+
+      - name: Init, validate and lint each catalog
+        run: |
+          set -euo pipefail
+          for dir in infrastructure/catalogs/public/*/; do
+            echo "::group::$dir"
+            tofu -chdir="$dir" init -backend=false -input=false
+            tofu -chdir="$dir" validate
+            tflint --chdir="$dir"
+            echo "::endgroup::"
+          done
+
+      - name: Catalog unit tests (mocked)
+        run: |
+          set -euo pipefail
+          for dir in infrastructure/catalogs/public/*/; do
+            if [ -f "$dir/tests/unit.tftest.hcl" ]; then
+              echo "::group::unit tests $dir"
+              tofu -chdir="$dir" test
+              echo "::endgroup::"
+            fi
+          done
+
+      - name: Trivy config scan
+        run: trivy config --severity HIGH,CRITICAL --exit-code 1 infrastructure/

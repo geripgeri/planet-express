@@ -1,0 +1,81 @@
+name: Tofu Plan
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'infrastructure/**'
+      - '.gitea/workflows/tofu-plan.yaml'
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up OpenTofu
+        uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: 1.12.5
+
+      - name: Set up terragrunt
+        run: |
+          set -euo pipefail
+          curl -sfL \
+            https://github.com/gruntwork-io/terragrunt/releases/download/v1.1.2/terragrunt_linux_amd64 \
+            -o /usr/local/bin/terragrunt
+          chmod +x /usr/local/bin/terragrunt
+
+      - name: Set up sops
+        run: |
+          set -euo pipefail
+          curl -sfL \
+            https://github.com/getsops/sops/releases/download/v3.13.3/sops-v3.13.3.linux.amd64 \
+            -o /usr/local/bin/sops
+          chmod +x /usr/local/bin/sops
+
+      - name: Stage the runner age key
+        env:
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
+        run: |
+          set -euo pipefail
+          install -m 600 /dev/null /tmp/runner.agekey
+          printf '%s\n' "$SOPS_AGE_KEY" > /tmp/runner.agekey
+
+      - name: Plan stacks
+        env:
+          SOPS_AGE_KEY_FILE: /tmp/runner.agekey
+        run: |
+          set -euo pipefail
+          stacks=$(find infrastructure/stacks -name terragrunt.stack.hcl -exec grep -qE '^[[:space:]]*(unit|stack)[[:space:]]+"' {} \; -exec dirname {} \; | sort -u)
+          echo "Found stacks:"
+          echo "$stacks"
+          fail=0
+          while IFS= read -r stack; do
+            echo "::group::Plan $stack"
+            cd "$GITHUB_WORKSPACE/$stack"
+            terragrunt stack run plan --log-level info \
+              > "$GITHUB_WORKSPACE/plan-$(basename "$stack").log" 2>&1 || fail=1
+            cat "$GITHUB_WORKSPACE/plan-$(basename "$stack").log"
+            echo "::endgroup::"
+            cd "$GITHUB_WORKSPACE"
+          done <<< "$stacks"
+          exit $fail
+
+      - name: Upload plan logs
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v3
+        with:
+          name: tofu-plans
+          path: plan-*.log
+
+      - name: Remove the staged age key
+        if: ${{ always() }}
+        run: shred -u /tmp/runner.agekey

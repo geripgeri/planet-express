@@ -19,15 +19,14 @@ variables {
       vmid                     = 5901
       # Provider plan validation rejects the empty-string fallback that
       # main.tf sends when macaddr is null, so tests supply a valid address.
-      macaddr                 = "bc:24:11:2a:3b:4c"
-      vmodel                  = "virtio"
-      vnetwork                = "vmbr0"
-      additional_vnetwork     = null
-      vnetwork_tag            = null
-      additional_vnetwork_tag = null
-      vcores                  = 1
-      vram                    = 1024
-      tags                    = "ci;tftest"
+      macaddr             = "bc:24:11:2a:3b:4c"
+      vmodel              = "virtio"
+      vnetwork            = "vmbr0"
+      additional_vnetwork = null
+      vnetwork_tag        = null
+      vcores              = 1
+      vram                = 1024
+      tags                = "ci;tftest"
     }
   }
 

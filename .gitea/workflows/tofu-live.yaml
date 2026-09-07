@@ -1,0 +1,48 @@
+name: Tofu Live
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'infrastructure/**'
+      - '.gitea/workflows/tofu-live.yaml'
+  schedule:
+    # Nightly live run doubles as drift detection for catalogs.
+    - cron: '23 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: proxmox-live
+  cancel-in-progress: false
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up OpenTofu
+        uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: 1.12.5
+
+      - name: Run live tests (tiny guests, serial)
+        env:
+          TF_VAR_pm_api_url: ${{ secrets.PROXMOX_API_URL }}
+          TF_VAR_pm_api_token_id: ${{ secrets.PROXMOX_API_TOKEN_ID }}
+          TF_VAR_pm_api_token_secret: ${{ secrets.PROXMOX_API_TOKEN }}
+          TF_VAR_pm_target_node: zoidberg
+        run: |
+          set -euo pipefail
+          for harness in infrastructure/tests/live/*/; do
+            echo "::group::live tests $harness"
+            tofu -chdir="$harness" init -input=false
+            tofu -chdir="$harness" test
+            echo "::endgroup::"
+          done
