@@ -129,9 +129,35 @@ are easy to misread:
   the wrapper default previously diverged from that pin (12.7 vs 12.12,
   fixed in this commit). Update them together (Renovate does not know
   about the wrapper).
-- The argocd stack (infrastructure/stacks/public/argocd) stays outside
-  the L3 plan gate until the runner holds its kubeconfig and sops age
-  inputs; PRs touching that stack therefore get no plan coverage today.
+
+## CI plan identity (first-time host apply)
+
+The argocd stack is planned against the live cluster, so the runner needs
+a read-only kubeconfig. The unit
+`infrastructure/units/public/ci/ci-plan` provisions exactly that (RBAC and
+a long-lived ServiceAccount token) and emits the ready kubeconfig as an
+output. `ci-plan` is a **standalone unit — it must never join a stack**:
+the plan loop it serves has no cluster access until this unit exists, and
+letting the runner re-apply its own credentials would be a self-escalation
+vector. Apply it from a workstation that holds the talosctl admin
+kubeconfig, once:
+
+1. Confirm the argocd stack is applied (the `argocd` and `cert-manager`
+   namespaces must exist; the unit binds Roles inside them).
+2. In `infrastructure/units/public/ci/ci-plan`, with the host kubeconfig
+   active in `~/.kube/config` and `SOPS_AGE_KEY` exported:
+   `terragrunt apply`.
+3. Read the kubeconfig: `terragrunt output -raw kubeconfig`. The token
+   Controller fills the Secret asynchronously; if the token is empty,
+   wait a few seconds and re-run `terragrunt output --refresh-only -raw kubeconfig`.
+4. Store the base64 blob as the Gitea repo secret `KUBECONFIG`. The
+   workflow writes it to `$HOME/.kube/config` before planning.
+
+The granted access is read-only: namespaces cluster-wide, Secrets inside
+`argocd`/`cert-manager`, and `argoproj.io` Applications inside `argocd`.
+No write verbs anywhere — plan only. A future `apply` phase needs a second
+identity with write verbs on those same resources; plan it then, not by
+widening this one.
 
 ## Verification history
 
