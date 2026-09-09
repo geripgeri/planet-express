@@ -68,7 +68,7 @@ The telmate `proxmox` provider at `rc08`/`rc09` issues a second start on VMs it 
 - Compare `talosctl version --client` and server `Tag`. Fail fast if they differ.
 - Wrap `etcd status` with `timeout 10`. Hang is treated as not bootstrapped.
 - Change `cluster_bootstrap` to wait for controller only, keep `90*10s` timeout per request.
-- Make `proxmox-vm` accept `static_ip_addresses`. `talos-vms` builds `192.0.2.30-33` via `cidrhost(vlan-10.subnet, vmid-470)` and returns them. `talos-cluster` now uses `dependency.talos_vms.outputs.ip_addresses`.
+- Make `proxmox-vm` accept `static_ip_addresses`. `talos-vms` builds `192.0.2.30-33` via `cidrhost(vlan-10.subnet, vmid-470)` and returns them. `talos-cluster` reads the same addresses from `talos/base.hcl` (the single source of truth; a `dependency` block on `talos-vms` later proved unusable in `stack run plan`).
 - Add `metal-amd64.iso` download as `talos-<version>-nocloud-amd64.iso` via Ansible single source `proxmox_base_talos_iso_version`. Keep 5 most recent ISOs with prune task using `pipefail`.
 - Make `cluster_health` retry `get machinestatus` per node.
 - Make `rolling_upgrade` wait for each node, skip if already on `v1.13.9`, wait after reboot. Controller last.

@@ -45,6 +45,12 @@ an [ADR](docs/decisions/) explaining what was evaluated, what lost, and why.
 - Unit `path` values in `terragrunt.stack.hcl` mirror the `units/` tree
   nesting (e.g. `proxmox/talos-vms`), so relative `dependency.config_path`
   values between units stay valid inside `.terragrunt-stack/`
+- Do NOT put `dependency` blocks between two units of the same stack:
+  `stack run` resolves them by executing `tofu output -json` in an
+  un-inited workdir and fails with "Required plugins are not installed".
+  Read shared topology via `read_terragrunt_config` from the shared base
+  config instead (e.g. `talos/talos-cluster` reads IPs from
+  `talos/base.hcl`)
 - Never read values via `include.<label>.locals`; it resolves to null on
   current Terragrunt releases. Use `read_terragrunt_config` instead
 - Verify stack changes with the full `terragrunt stack run plan`, not just
