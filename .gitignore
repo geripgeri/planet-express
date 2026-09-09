@@ -37,10 +37,6 @@ override.tf.json
 .terraformrc
 terraform.rc
 
-# Lock files created by `tofu init` in catalog working copies; the real
-# pins live in the lock files we commit next to each unit.
-.terraform.lock.hcl
-
 # ---> Terragrunt
 # Ignore the default terragrunt cache directory
 # https://terragrunt.gruntwork.io/docs/features/caching/

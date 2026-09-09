@@ -4,16 +4,6 @@ locals {
   # Shared Talos cluster identity + topology: cluster name, kubeconfig
   # context, controller/worker VMIDs (single source of truth).
   talos_base = read_terragrunt_config("${get_repo_root()}/infrastructure/units/public/talos/base.hcl")
-
-  # Worker IPs from the talos_vms dependency output (actual provisioned
-  # addresses); names and VMIDs from talos_base.
-  workers = {
-    for name, ws in local.talos_base.locals.workers :
-    name => {
-      ip   = dependency.talos_vms.outputs.ip_addresses[name]
-      vmid = ws.vmid
-    }
-  }
 }
 
 include "root" {
@@ -22,10 +12,6 @@ include "root" {
 
 terraform {
   source = "${get_repo_root()}//infrastructure/catalogs/public/talos"
-}
-
-dependency "talos_vms" {
-  config_path = "../../proxmox/talos-vms"
 }
 
 inputs = {
@@ -57,10 +43,20 @@ inputs = {
     for name, cfg in local.secret_vars.network_config : name => cfg if can(cfg.subnet)
   }
 
-  # One-shot stack: talos_vms outputs static IPs (cidrhost vlan-10 30-33)
-  # instead of qemu-guest-agent default_ipv4_address, so use dependency.
-  controller_ips  = [dependency.talos_vms.outputs.ip_addresses["talos-controller-01"]]
+  # IPs come from base.hcl (same cidrhost formula the talos-vms Terraform
+  # module uses). The old dependency block on talos_vms fails in stack mode
+  # because stack-run resolves dependencies via tofu output -json, which
+  # needs providers cached in the dependency unit's .terragrunt-cache — but
+  # the dependency unit hasn't been init'd yet.  Base.hcl is the single
+  # source of truth for the whole cluster topology.
+  controller_ips  = [local.talos_base.locals.controller_ip]
   controller_vmid = local.talos_base.locals.controller_vmid
 
-  workers = local.workers
+  workers = {
+    for name, ws in local.talos_base.locals.workers :
+    name => {
+      ip   = ws.ip
+      vmid = ws.vmid
+    }
+  }
 }

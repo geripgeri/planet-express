@@ -39,6 +39,19 @@ cd infrastructure/stacks/public/proxmox && terragrunt stack run plan
 cd ../garage && terragrunt stack run plan
 ```
 
+Stack-run gotcha: do NOT add a `dependency` block between two units in
+the same stack. `stack run` resolves it by executing `tofu output -json`
+in the dependency unit's generated workdir, but that unit is never inited
+in the run phase, so the executor fails with "Required plugins are not
+installed" and the consuming unit then fails with "There is no variable
+named `dependency`". `mock_outputs` do not help. If the units share
+topology, read the shared base config instead: e.g. `talos-cluster` reads
+IPs and VMIDs straight from `talos/base.hcl`, which is the same
+`cidrhost` formula `talos-vms` computes (see
+`infrastructure/units/public/talos/talos-cluster/terragrunt.hcl`). Same
+class of bug as the `include.<label>.locals` null trap — prefer
+`read_terragrunt_config`.
+
 L4 (creates and destroys real guests; ~1.5GB peak RAM; never run two at
 once, and not while another Terragrunt run holds the stack lock):
 
