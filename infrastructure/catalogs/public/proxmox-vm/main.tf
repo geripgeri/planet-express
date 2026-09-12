@@ -36,6 +36,13 @@ resource "proxmox_vm_qemu" "this" {
   qemu_os            = var.vm_details.qemu_os
   start_at_node_boot = var.vm_details.start_at_node_boot
 
+  # Explicit pin. The schema has no default for vm_state, so omitting it made
+  # every plan show "running -> null", which in turn reset the computed IP
+  # attrs (default_ipv4_address, ssh_host, ssh_port) to "known after apply".
+  # vm_state not power_state: the unit lock still pins rc07, and the provider
+  # line reads vm_state into state. Talos nodes must always run.
+  vm_state = "running"
+
   disks {
     dynamic "ide" {
       for_each = var.vm_details.iso_name != null ? [1] : []
