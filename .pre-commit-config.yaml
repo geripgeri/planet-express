@@ -108,3 +108,10 @@ repos:
       exclude: ^docs/superpowers/
       pass_filenames: true
       verbose: true
+    - id: provider-lock-drift
+      name: Check OpenTofu provider lock drift
+      entry: uv run scripts/check_provider_locks.py --fix
+      language: system
+      files: ^infrastructure/
+      pass_filenames: false
+      verbose: true
