@@ -24,7 +24,7 @@ output "kubeconfig" {
     clusters:
     - name: talos-cluster-01
       cluster:
-        certificate-authority-data: ${data.kubernetes_secret_v1.ci_plan_token.data["ca.crt"]}
+        certificate-authority-data: ${base64encode(data.kubernetes_secret_v1.ci_plan_token.data["ca.crt"])}
         server: ${var.api_server}
     contexts:
     - name: admin@talos-cluster-01

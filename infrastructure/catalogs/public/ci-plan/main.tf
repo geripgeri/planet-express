@@ -4,7 +4,7 @@ terraform {
   required_providers {
     kubernetes = {
       source  = "opentofu/kubernetes"
-      version = "3.0.1"
+      version = "3.2.1"
     }
   }
 }

@@ -52,8 +52,16 @@ jobs:
       - name: Plan stacks
         env:
           SOPS_AGE_KEY_FILE: /tmp/runner.agekey
+          KUBECONFIG: ${{ secrets.KUBECONFIG }}
         run: |
           set -euo pipefail
+
+          if [ -n "${KUBECONFIG:-}" ]; then
+            mkdir -p "$HOME/.kube"
+            printf '%s' "$KUBECONFIG" | base64 -d > "$HOME/.kube/config"
+            chmod 600 "$HOME/.kube/config"
+          fi
+
           stacks=$(find infrastructure/stacks -name terragrunt.stack.hcl -exec grep -qE '^[[:space:]]*(unit|stack)[[:space:]]+"' {} \; -exec dirname {} \; | sort -u)
           echo "Found stacks:"
           echo "$stacks"
