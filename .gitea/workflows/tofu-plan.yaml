@@ -45,6 +45,14 @@ jobs:
             -o /usr/local/bin/sops
           chmod +x /usr/local/bin/sops
 
+      - name: Set up jq
+        run: |
+          set -euo pipefail
+          curl -sfL \
+            https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-linux-amd64 \
+            -o /usr/local/bin/jq
+          chmod +x /usr/local/bin/jq
+
       - name: Stage the runner age key
         env:
           SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
@@ -113,6 +121,64 @@ jobs:
             failed-stacks.txt
             plan-shas.txt
             tofu-plans-*.tar.gz
+
+      - name: Post plan comments
+        if: ${{ always() }}
+        env:
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+          SERVER_URL: ${{ github.server_url }}
+          REPO: ${{ github.repository }}
+          PR_NUM: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          [ -f stacks.txt ] || exit 0
+          fail=0
+          while IFS= read -r stack; do
+            name="$(basename "$stack")"
+            log="$GITHUB_WORKSPACE/plan-$name.log"
+            [ -f "$log" ] || continue
+            echo "::group::Comment $name"
+            summary="Tofu plan: $name"
+            if grep -qx "$name" "$GITHUB_WORKSPACE/failed-stacks.txt" 2>/dev/null; then
+              summary="Tofu plan FAILED: $name"
+            fi
+            diff_file="$GITHUB_WORKSPACE/body-$name.txt"
+            sed -E 's/\x1b\[[0-9;]*m//g; /tofu: /{ s/^.*tofu: //; s/^[[:space:]]*([+-])/\1/; }' \
+              "$log" \
+              | grep -E '^[[:space:]]*[+~-] |^[[:space:]]*# |^Plan:|^No changes|^[[:space:]]*(Error|╷|│)' \
+              > "$diff_file"
+            if [ "$(wc -c < "$diff_file")" -gt 30000 ]; then
+              head -c 30000 "$diff_file" > "$diff_file.cap"
+              mv "$diff_file.cap" "$diff_file"
+              printf '\n-- truncated at 30000 chars; full log in Tofu plan artifact --\n' >> "$diff_file"
+            fi
+            body_file="$GITHUB_WORKSPACE/comment-$name.md"
+            {
+              printf '<details>\n<summary><b>%s</b></summary>\n\n' "$summary"
+              printf '```diff\n'
+              cat "$diff_file"
+              printf '\n```\n\n'
+              printf '%s\n' "<!-- tofu-plan:$name -->"
+              printf '%s\n' '</details>'
+            } > "$body_file"
+            comments_url="$SERVER_URL/api/v1/repos/$REPO/issues/$PR_NUM/comments"
+            existing_id=$(curl -fsSL -H "Authorization: token $GITEA_TOKEN" "$comments_url" | \
+              jq -r --arg m "tofu-plan:$name" '.[] | select(.body | contains($m)) | .id' | head -1)
+            payload=$(jq -nc --rawfile b "$body_file" '{body:$b}')
+            if [ -n "$existing_id" ]; then
+              curl -fsSL -X PATCH -H "Authorization: token $GITEA_TOKEN" \
+                -H "Content-Type: application/json" -d "$payload" \
+                "$SERVER_URL/api/v1/repos/$REPO/issues/comments/$existing_id" >/dev/null || fail=1
+            else
+              curl -fsSL -X POST -H "Authorization: token $GITEA_TOKEN" \
+                -H "Content-Type: application/json" -d "$payload" \
+                "$comments_url" >/dev/null || fail=1
+            fi
+            rm -f "$diff_file" "$body_file"
+            echo "::endgroup::"
+          done < "$GITHUB_WORKSPACE/stacks.txt"
+          exit $fail
 
       - name: Remove the staged age key
         if: ${{ always() }}
