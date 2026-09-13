@@ -17,15 +17,16 @@ terraform {
 inputs = {
   talos_cluster_details = {
     name    = local.talos_base.locals.cluster_name
-    version = "v1.13.9"
+    version = "v1.14.0"
     # K8s 1.35.8 is the latest 1.35 patch and the maximum supported by Talos
     # 1.12.x (support matrix talos.dev/v1.12/introduction/support-matrix).
     # Fresh VMs boot the 1.12-era ISO; applying K8s 1.36.x before the Talos
     # upgrade is rejected by the node with "version of Kubernetes 1.36.x is
     # too new to be used with Talos 1.12.4" (see docs/runbooks/talos-k8s-upgrade.md §2).
     # Two-phase rebuild required: keep K8s at 1.35.x while Talos upgrades to
-    # 1.13.x, then bump K8s to 1.36.x in a second apply. Do not bump to
-    # 1.37.x until Talos 1.14 is pinned (K8s 1.37 requires Talos 1.14).
+    # 1.13.x, then bump K8s to 1.36.x in a second apply. Talos 1.14 supports
+    # K8s 1.37 (default); bump kubernetes_version in a second apply after the
+    # Talos upgrade lands.
     kubernetes_version = "1.35.8"
     longhorn_disk_size = "100GB"
   }
