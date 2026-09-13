@@ -7,6 +7,10 @@ on:
       - 'infrastructure/**'
       - '.gitea/workflows/tofu-plan.yaml'
 
+concurrency:
+  group: tofu-plan-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
   pull-requests: read
@@ -53,6 +57,7 @@ jobs:
         env:
           SOPS_AGE_KEY_FILE: /tmp/runner.agekey
           KUBECONFIG: ${{ secrets.KUBECONFIG }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
 
@@ -65,16 +70,36 @@ jobs:
           stacks=$(find infrastructure/stacks -name terragrunt.stack.hcl -exec grep -qE '^[[:space:]]*(unit|stack)[[:space:]]+"' {} \; -exec dirname {} \; | sort -u)
           echo "Found stacks:"
           echo "$stacks"
+          printf '%s\n' "$stacks" > "$GITHUB_WORKSPACE/stacks.txt"
           fail=0
+          : > "$GITHUB_WORKSPACE/failed-stacks.txt"
           while IFS= read -r stack; do
             echo "::group::Plan $stack"
+            name="$(basename "$stack")"
             cd "$GITHUB_WORKSPACE/$stack"
-            terragrunt stack run plan --log-level info \
-              > "$GITHUB_WORKSPACE/plan-$(basename "$stack").log" 2>&1 || fail=1
-            cat "$GITHUB_WORKSPACE/plan-$(basename "$stack").log"
+            terragrunt stack run plan --out-dir "$GITHUB_WORKSPACE/plans/$name" --log-level info \
+              > "$GITHUB_WORKSPACE/plan-$name.log" 2>&1 \
+              || { fail=1; printf '%s\n' "$name" >> "$GITHUB_WORKSPACE/failed-stacks.txt"; }
+            cat "$GITHUB_WORKSPACE/plan-$name.log"
             echo "::endgroup::"
             cd "$GITHUB_WORKSPACE"
           done <<< "$stacks"
+          exit $fail
+
+      - name: Archive plan binaries
+        if: ${{ always() }}
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          fail=0
+          for d in plans/*/; do
+            [ -d "$d" ] || continue
+            name="$(basename "$d")"
+            tar -czf "tofu-plans-$name.tar.gz" -C plans "$name" || fail=1
+          done
+          printf '%s\n' "$PR_HEAD_SHA" > plan-shas.txt
           exit $fail
 
       - name: Upload plan logs
@@ -82,7 +107,12 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: tofu-plans
-          path: plan-*.log
+          path: |
+            plan-*.log
+            stacks.txt
+            failed-stacks.txt
+            plan-shas.txt
+            tofu-plans-*.tar.gz
 
       - name: Remove the staged age key
         if: ${{ always() }}
