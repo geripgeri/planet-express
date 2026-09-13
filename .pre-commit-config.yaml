@@ -57,6 +57,8 @@ repos:
   rev: v26.6.0
   hooks:
     - id: ansible-lint
+      always_run: false
+      files: ^ansible/
       entry: bash -c 'cd ansible && python3 -m ansiblelint -v --force-color'
 - repo: https://github.com/zrootorg/kubeconform-precommit-hook
   rev: v0.0.1
