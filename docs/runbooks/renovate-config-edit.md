@@ -42,7 +42,7 @@ Notes:
   `"currentValue": "v1.13.8"`, `"datasource": "github-tags"`,
   `"replaceString"` showing the exact matched span, and the correct
   `packageFile` (`infrastructure/units/public/talos/talos-cluster/terragrunt.hcl`).
-- Kubernetes manager: `"currentValue": "1.36.2"` + `"extractVersion"` present.
+- Kubernetes manager: `"currentValue": "1.37.0"` + `"extractVersion"` present.
 - Garage manager: `"depName": "Deuxfleurs/garage"`, `"currentValue": "2.3.0"`,
   `"datasource": "gitea-tags"`, live tag lookup resolves (`sourceUrl`
   present). The sandbox reaches git.deuxfleurs.fr.

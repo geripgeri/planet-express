@@ -1,7 +1,7 @@
 # Runbook: Talos + Kubernetes Upgrade
 
 Upgrade the Talos cluster (Talos minor/patch + Kubernetes minor). Follow top-to-bottom.
-Current example: v1.12.4 → v1.13.8, Kubernetes 1.35.0 → 1.36.2.
+Current example: v1.12.4 → v1.14.0, Kubernetes 1.35.8 → 1.37.0.
 
 ## 0. Control-plane sizing requirement
 
@@ -166,9 +166,9 @@ Notes:
 ## 6. Post-upgrade verification
 
 ```bash
-kubectl get nodes -o wide            # all v1.36.2, Ready
+kubectl get nodes -o wide            # all v1.37.0, Ready
 kubectl get pods -A | grep -v Running | grep -v Completed   # nothing stuck
-talosctl -n <controller-ip> version  # v1.13.8
+talosctl -n <controller-ip> version  # v1.14.0
 
 # ArgoCD auth (SA token invalidated by new signing key)
 kubectl -n argocd rollout restart deployment/argocd-server
