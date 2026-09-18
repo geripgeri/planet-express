@@ -17,7 +17,7 @@ terraform {
 inputs = {
   talos_cluster_details = {
     name    = local.talos_base.locals.cluster_name
-    version = "v1.14.0"
+    version = "v1.14.1"
     # K8s 1.37 is the default/maximum supported by Talos 1.14 (support matrix
     # talos.dev/v1.14/introduction/support-matrix). This was bumped in a second
     # apply after the Talos upgrade (renovate caps K8s < 1.38 until Talos 1.15,
