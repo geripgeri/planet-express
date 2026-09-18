@@ -1,0 +1,93 @@
+name: Tofu Lockfile
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'infrastructure/**'
+      - '.gitea/workflows/tofu-lockfile.yaml'
+
+concurrency:
+  group: tofu-lockfile-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  lockfile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          # Check out the PR head branch so lockfile fixes can be committed
+          # back to it. Pushing and authoring as renovate-bot keeps fixes
+          # attributed to the bot, not a human account, and keeps the branch as
+          # close to Renovate's own as possible. RENOVATE_TOKEN must have
+          # write:repository (Renovate itself pushes with it).
+          ref: ${{ github.event.pull_request.head.ref }}
+          token: ${{ secrets.RENOVATE_TOKEN }}
+
+      - name: Set up OpenTofu
+        uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: 1.12.5
+
+      - name: Set up terragrunt
+        run: |
+          set -euo pipefail
+          curl -sfL \
+            https://github.com/gruntwork-io/terragrunt/releases/download/v1.1.2/terragrunt_linux_amd64 \
+            -o /usr/local/bin/terragrunt
+          chmod +x /usr/local/bin/terragrunt
+
+      - name: Set up sops
+        run: |
+          set -euo pipefail
+          curl -sfL \
+            https://github.com/getsops/sops/releases/download/v3.13.3/sops-v3.13.3.linux.amd64 \
+            -o /usr/local/bin/sops
+          chmod +x /usr/local/bin/sops
+
+      - name: Stage the runner age key
+        env:
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
+        run: |
+          set -euo pipefail
+          install -m 600 /dev/null /tmp/runner.agekey
+          printf '%s\n' "$SOPS_AGE_KEY" > /tmp/runner.agekey
+
+      - name: Regenerate drifting provider lockfiles
+        env:
+          SOPS_AGE_KEY_FILE: /tmp/runner.agekey
+        run: |
+          set -euo pipefail
+          python3 scripts/check_provider_locks.py --fix
+
+      - name: Commit lockfile fixes back to the PR branch
+        env:
+          SOPS_AGE_KEY_FILE: /tmp/runner.agekey
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          # Bot identity. The email comes from the RENOVATE_EMAIL repo secret
+          # (same address Renovate commits with) — nothing hardcoded in the
+          # workflow. Gitea attributes the commit to the push-token account
+          # (renovate-bot) regardless of the author string.
+          git config user.name "renovate-bot"
+          git config user.email "${{ secrets.RENOVATE_EMAIL }}"
+          git add infrastructure
+          if git diff --cached --quiet; then
+            echo "No lockfile changes; nothing to commit."
+            exit 0
+          fi
+          git commit -m "chore: regenerate OpenTofu provider lockfiles"
+          git push origin "HEAD:$PR_HEAD_REF"
+
+      - name: Remove the staged age key
+        if: ${{ always() }}
+        run: shred -u /tmp/runner.agekey
