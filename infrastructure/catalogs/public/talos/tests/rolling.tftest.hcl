@@ -3,7 +3,7 @@ mock_provider "talos" {}
 mock_provider "null" {}
 
 variables {
-  talos_cluster_details   = { name = "talos-cluster-01", version = "v1.13.9", kubernetes_version = "1.35.8", longhorn_disk_size = "100GB" }
+  talos_cluster_details   = { name = "talos-cluster-01", version = "v1.14.0", kubernetes_version = "1.37.0", longhorn_disk_size = "100GB" }
   machine_secrets_version = "v1.12.4"
   controller_ips          = ["192.0.2.10"]
   controller_vmid         = 500

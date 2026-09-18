@@ -267,15 +267,14 @@
       "labels": ["renovate", "cluster-upgrade"]
     },
 
-    // Cap Kubernetes at <1.37 until Talos 1.14 is pinned: K8s 1.37 requires
-    // Talos 1.14 per support matrix (talos.dev/v1.12/introduction/support-matrix).
-    // Without this, Renovate proposes 1.37.0 which fails with
-    // "version of Kubernetes 1.37.0 is too new to be used with Talos 1.13.x".
-    // Remove once Talos 1.14 is stable and pinned in talos-cluster/terragrunt.hcl.
+    // Kubernetes is capped at 1.37 by the Talos 1.14 support matrix
+    // (talos.dev/v1.14/introduction/support-matrix): K8s 1.38 requires a newer
+    // Talos. Renovate must not propose K8s 1.38 before Talos 1.15 is pinned.
+    // Follow docs/runbooks/talos-k8s-upgrade.md (two-phase upgrade flow).
     {
       "matchManagers": ["custom.regex"],
       "matchPackageNames": ["kubernetes/kubernetes"],
-      "allowedVersions": "< 1.37.0"
+      "allowedVersions": "< 1.38.0"
     },
 
     // Guard: Garage server upgrades NEVER auto-merge. It hosts the OpenTofu
