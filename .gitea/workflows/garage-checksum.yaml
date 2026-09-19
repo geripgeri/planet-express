@@ -1,0 +1,53 @@
+name: Garage Checksum
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'ansible/roles/garage/defaults/main.yaml'
+      - 'scripts/update_artifact_checksums.py'
+      - '.gitea/workflows/garage-checksum.yaml'
+
+concurrency:
+  group: garage-checksum-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  checksum:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: github.event.pull_request.user.login == 'renovate-bot'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          token: ${{ secrets.RENOVATE_TOKEN }}
+
+      - name: Compute and fix stale checksums
+        run: python3 scripts/update_artifact_checksums.py --fix
+
+      - name: Commit checksum fix back to the PR branch
+        env:
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          # Bot identity, same convention as tofu-lockfile.yaml. Gitea
+          # attributes the commit to the push-token account (renovate-bot).
+          git config user.name "renovate-bot"
+          git config user.email "${{ secrets.RENOVATE_EMAIL }}"
+          git add ansible/roles/garage/defaults/main.yaml
+          if git diff --cached --quiet; then
+            echo "No checksum change; nothing to commit."
+            exit 0
+          fi
+          git commit -m "chore: update garage sha256 checksum"
+          git push origin "HEAD:$PR_HEAD_REF"
+
+      - name: Verify stored checksum matches the release
+        run: python3 scripts/update_artifact_checksums.py --verify
