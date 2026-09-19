@@ -5,7 +5,7 @@
 # new binary with `--version` and `sha256sum` first (releases are published
 # on garagehq.deuxfleurs.fr / git.deuxfleurs.fr, not GitHub).
 garage_version: "2.4.1"
-garage_checksum: "sha256:f98d317942bb341151a2775162016bb50cf86b865d0108de03eb5db16e2120cd"
+garage_checksum: "sha256:ae49f8de4aaee6b5ca305f7cbdccc8cd8a29b2804aac074649f18bfb83d0a2b6"
 garage_binary_url: "https://garagehq.deuxfleurs.fr/_releases/v{{ garage_version }}/x86_64-unknown-linux-musl/garage"
 garage_binary_dest: /usr/local/bin/garage
 
