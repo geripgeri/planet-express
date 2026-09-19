@@ -78,6 +78,9 @@ Normal PR flow (leela/fry). Do not merge the config PR and a
 - **`cluster-upgrade` label** (Talos/K8s): never automerged by design.
   Follow `docs/runbooks/talos-k8s-upgrade.md` — maintenance window, etcd
   snapshot, plan expectations.
+- **`garage-upgrade` label**: never automerged. The sha256 checksum is
+  auto-filled by the garage-checksum workflow; still verify the binary with
+  `--version` and `sha256sum` during review before merging.
 - **`security` label**: OSV vulnerability alerts, `prPriority: 20`, not held
   by `minimumReleaseAge`. Merge promptly.
 - **Everything else** (minor/patch, non-0.x): automerged by the last rules —

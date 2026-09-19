@@ -186,9 +186,8 @@ fail with `InvalidAccessKeyId` / `SignatureDoesNotMatch`. Region must match
   destination and cadence are still to be defined (TODO in the rulebook)
 - Garage upgrades: Renovate raises version-only PRs for `garage_version`
   (custom regex manager against git.deuxfleurs.fr tags). It cannot compute
-  the artifact hash: add the matching `garage_checksum` manually in the same
-  PR before merge — until then the checksum pin fails the next ansible run
-  loudly. Verify the new binary with `--version` and `sha256sum` first
-  (releases are published on garagehq.deuxfleurs.fr / git.deuxfleurs.fr,
-  not GitHub), then re-run
+  the artifact hash: the `garage-checksum` workflow downloads the pinned
+  binary, verifies it runs (`--version`) and commits the matching
+  `garage_checksum` back onto the PR branch. Review still verifies the
+  binary with `--version` and `sha256sum`, then re-runs
   `ansible-playbook playbooks/bootstrap.yaml --limit garage-01 --tags garage`
