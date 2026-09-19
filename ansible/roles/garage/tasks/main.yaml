@@ -20,8 +20,8 @@
     # a pin, force: true makes get_url re-download a stale existing file it
     # otherwise skips for lack of a hash. Skip check mode: get_url still
     # performs a live download there.
-    checksum: "{{ garage_checksum | default(omit) if garage_checksum else omit }}"
-    force: "{{ not garage_checksum }}"
+    checksum: "{{ garage_checksum | default(omit) if garage_checksum != '' else omit }}"
+    force: "{{ garage_checksum == '' }}"
     timeout: 120
   when:
     - not ansible_check_mode
@@ -60,7 +60,7 @@
 '{{ garage_computed_checksum }}'; update the pin or clear garage_checksum to degrade"
   when:
     - not ansible_check_mode
-    - garage_checksum
+    - garage_checksum != ""
     - garage_checksum != garage_computed_checksum
 
 - name: Announce computed checksum when garage is unpinned
@@ -69,7 +69,7 @@
 {{ garage_computed_checksum }}\nExpected --version output for pinning review: garage v{{ garage_version }}"
   when:
     - not ansible_check_mode
-    - not garage_checksum
+    - garage_checksum == ""
 
 - name: Create garage system user
   ansible.builtin.user:
