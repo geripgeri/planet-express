@@ -14,6 +14,7 @@ Usage:
 from __future__ import annotations
 
 import hashlib
+import os
 import re
 import subprocess
 import sys
@@ -89,14 +90,18 @@ def checksum_for(entry: dict, version: str, fetch_fn=None, run_fn=None) -> str:
     data = fetch(url_for(entry, version), fetch_fn=fetch_fn)
     verify_args = entry.get("verify_args")
     if verify_args:
-        with tempfile.NamedTemporaryFile() as tmp:
-            path = Path(tmp.name)
-            path.write_bytes(data)
+        fd, name = tempfile.mkstemp()
+        path = Path(name)
+        try:
+            with os.fdopen(fd, "wb") as fh:
+                fh.write(data)
             path.chmod(0o755)
             if not run_verify(path, version, verify_args, run_fn=run_fn):
                 raise ValueError(
                     f"binary for version {version} failed {verify_args[0]}"
                 )
+        finally:
+            path.unlink()
     return "sha256:" + sha256_of(data)
 
 

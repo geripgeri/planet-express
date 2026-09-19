@@ -1,6 +1,9 @@
 """Tests for scripts.update_artifact_checksums."""
 
+import runpy
+import sys
 from pathlib import Path
+from unittest import mock
 
 import pytest
 
@@ -80,6 +83,23 @@ def test_fetch_fake_opener():
     assert fetch("https://example.com/any", fetch_fn=fake_fetch) == BIN
 
 
+def test_fetch_default_opener_reads_response():
+    with mock.patch(
+        "scripts.update_artifact_checksums.urllib.request.urlopen"
+    ) as open_mock:
+        open_mock.return_value.__enter__.return_value.read.return_value = b"payload"
+        assert fetch("https://example.com/real") == b"payload"
+        open_mock.assert_called_once_with("https://example.com/real", timeout=60)
+
+
+def test_main_guard_executes_main(capsys):
+    sys.argv = ["update_artifact_checksums.py", "--bogus"]
+    with pytest.raises(SystemExit) as exc:
+        runpy.run_path("scripts/update_artifact_checksums.py", run_name="__main__")
+    assert exc.value.code == 2
+    assert "usage:" in capsys.readouterr().err
+
+
 def test_fetch_custom_error_surfaces():
     def explode(url: str) -> bytes:
         raise PermissionError("denied")
@@ -123,6 +143,16 @@ def test_checksum_for_verify_failure_raises():
 
     with pytest.raises(ValueError):
         checksum_for(garage_entry(), "2.3.0", fetch_fn=fake_fetch, run_fn=bad_run)
+
+
+def test_checksum_for_real_exec_close_before_exec():
+    script = b"#!/bin/sh\necho 2.3.0\n"
+
+    def script_fetch(url: str) -> bytes:
+        return script
+
+    result = checksum_for(garage_entry(), "2.3.0", fetch_fn=script_fetch)
+    assert result == "sha256:" + sha256_of(script)
 
 
 def test_replace_checksum_writes_new_value():
