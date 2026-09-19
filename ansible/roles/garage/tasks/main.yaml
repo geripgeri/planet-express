@@ -4,20 +4,42 @@
 # provisioned by the garage-lxc OpenTofu unit and reachable over SSH.
 # See docs/runbooks/garage-lxc-setup.md for the full bootstrap flow.
 
+- name: Get installed Garage binary version
+  ansible.builtin.command: "{{ garage_binary_dest }} --version"
+  register: garage_installed_version
+  changed_when: false
+  failed_when: false
+  when: not ansible_check_mode
+
 - name: Download Garage binary
   ansible.builtin.get_url:
     url: "{{ garage_binary_url }}"
     dest: "{{ garage_binary_dest }}"
     mode: "0755"
-    checksum: "{{ garage_checksum }}"
+    # With a pin, checksum enforces it (get_url refetches on mismatch). Without
+    # a pin, force: true makes get_url re-download a stale existing file it
+    # otherwise skips for lack of a hash. Skip check mode: get_url still
+    # performs a live download there.
+    checksum: "{{ garage_checksum | default(omit) if garage_checksum else omit }}"
+    force: "{{ not garage_checksum }}"
     timeout: 120
-  # get_url still performs a live download in check mode; skip it so
-  # --check runs have no side effects. A changed binary MUST restart the
-  # daemon: without this notify an upgrade swaps the file on disk while the
-  # running service keeps the old in-memory binary, and `garage status`
-  # reports the stale version.
+  when:
+    - not ansible_check_mode
+    - garage_installed_version.stdout is not search(garage_version)
+
+- name: Re-read installed Garage binary version after download
+  ansible.builtin.command: "{{ garage_binary_dest }} --version"
+  register: garage_installed_version
+  changed_when: false
+  failed_when: false
   when: not ansible_check_mode
-  notify: Restart garage
+
+- name: Fail on garage binary version mismatch
+  ansible.builtin.fail:
+    msg: "Installed garage binary is '{{ garage_installed_version.stdout }}', expected garage_version '{{ garage_version }}'"
+  when:
+    - not ansible_check_mode
+    - garage_installed_version.stdout is not search(garage_version)
 
 - name: Create garage system user
   ansible.builtin.user:
