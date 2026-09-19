@@ -45,6 +45,7 @@
   ansible.builtin.stat:
     path: "{{ garage_binary_dest }}"
     get_checksum: true
+    checksum_algorithm: sha256
   register: garage_installed_stat
   when: not ansible_check_mode
 
