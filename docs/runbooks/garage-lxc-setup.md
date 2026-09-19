@@ -182,12 +182,49 @@ fail with `InvalidAccessKeyId` / `SignatureDoesNotMatch`. Region must match
 
 - Migrating existing units to the remote Garage state backend: see
   [the migration runbook](tofu-state-migration.md); decision context in [ADR-010](../decisions/ADR-010-garage.md)
+
 - The rclone snapshot schedule for Garage data (rulebook rule OBJ-02):
   destination and cadence are still to be defined (TODO in the rulebook)
+
 - Garage upgrades: Renovate raises version-only PRs for `garage_version`
-  (custom regex manager against git.deuxfleurs.fr tags). It cannot compute
-  the artifact hash: the `garage-checksum` workflow downloads the pinned
-  binary, verifies it runs (`--version`) and commits the matching
-  `garage_checksum` back onto the PR branch. Review still verifies the
-  binary with `--version` and `sha256sum`, then re-runs
-  `ansible-playbook playbooks/bootstrap.yaml --limit garage-01 --tags garage`
+  (custom regex manager against git.deuxfleurs.fr tags); the garage-checksum
+  CI fills the `garage_checksum` pin. The role converges in a single run —
+  one command, no manual steps:
+
+  ```bash
+  ansible-playbook playbooks/bootstrap.yaml --limit garage-01 --tags garage
+  ```
+
+  The role installs exactly `garage_version`, asserts the binary's
+  `--version` matches it, and fails the run otherwise. It then restarts the
+  daemon whenever `garage status` advertises a different version (the
+  2.3.0-on-disk-but-2.4.1 incident), so the running process never lags the
+  pinned binary. If the CI pin is missing or you upgrade outside Renovate,
+  clear the pin and let the role pin back for you: empty `garage_checksum`
+  in `defaults/main.yaml`, or pass it inline with
+  `--extra-vars 'garage_checksum='`.
+
+  ```bash
+  ansible-playbook playbooks/bootstrap.yaml --limit garage-01 --tags garage
+  ```
+
+  The un-pinned run installs over HTTPS-trust and prints the computed
+  `sha256:` value; copy it back into `defaults/main.yaml` as
+  `garage_checksum`.
+
+### Live verification
+
+For each scenario, run against the live node:
+`ansible-playbook playbooks/bootstrap.yaml --limit garage-01 --tags garage`,
+then confirm the result with `garage status`.
+
+(a) Pinned upgrade: bump a patch version of `garage_version`, run the
+playbook, and assert the healthy node in `garage status` reports the new
+`v` version.
+
+(b) Idempotency: run the playbook again unchanged; expect no download and
+no daemon restart (the version and checksum are already satisfied).
+
+(c) Degraded un-pinned run: clear `garage_checksum` and run once; expect a
+successful HTTPS-trust install with the computed `sha256:` printed for
+pinning.

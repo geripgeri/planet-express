@@ -1,9 +1,13 @@
 ---
-# Garage server version. The binary is a self-contained static musl build;
-# the checksum is pinned so a tampered or truncated download fails fast.
-# Upgrade: bump garage_version and garage_checksum together, verifying the
-# new binary with `--version` and `sha256sum` first (releases are published
-# on garagehq.deuxfleurs.fr / git.deuxfleurs.fr, not GitHub).
+# Garage server version. The binary is a self-contained static musl build
+# (releases published on garagehq.deuxfleurs.fr / git.deuxfleurs.fr, not
+# GitHub). The role installs exactly this version, asserts `--version`, and
+# restarts the daemon when the cluster's advertised version lags it.
+# garage_checksum (sha256:<hex>) is OPTIONAL: when set it is enforced and a
+# mismatch hard-fails; when empty/absent the role installs over HTTPS-trust
+# and prints the computed sha256 for you to pin back here.
+# Upgrade: bump garage_version (Renovate does this); the garage-checksum CI
+# fills the pin, or clear garage_checksum and let the role print it.
 garage_version: "2.4.1"
 garage_checksum: "sha256:ae49f8de4aaee6b5ca305f7cbdccc8cd8a29b2804aac074649f18bfb83d0a2b6"
 garage_binary_url: "https://garagehq.deuxfleurs.fr/_releases/v{{ garage_version }}/x86_64-unknown-linux-musl/garage"
