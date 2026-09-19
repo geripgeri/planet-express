@@ -12,8 +12,12 @@
     checksum: "{{ garage_checksum }}"
     timeout: 120
   # get_url still performs a live download in check mode; skip it so
-  # --check runs have no side effects.
+  # --check runs have no side effects. A changed binary MUST restart the
+  # daemon: without this notify an upgrade swaps the file on disk while the
+  # running service keeps the old in-memory binary, and `garage status`
+  # reports the stale version.
   when: not ansible_check_mode
+  notify: Restart garage
 
 - name: Create garage system user
   ansible.builtin.user:
