@@ -41,6 +41,35 @@
     - not ansible_check_mode
     - garage_installed_version.stdout is not search(garage_version)
 
+- name: Compute installed Garage binary sha256
+  ansible.builtin.stat:
+    path: "{{ garage_binary_dest }}"
+    get_checksum: true
+  register: garage_installed_stat
+  when: not ansible_check_mode
+
+- name: Record computed Garage checksum fact
+  ansible.builtin.set_fact:
+    garage_computed_checksum: "sha256:{{ garage_installed_stat.stat.checksum }}"
+  when: not ansible_check_mode
+
+- name: Fail on pinned garage checksum mismatch
+  ansible.builtin.fail:
+    msg: "garage_checksum '{{ garage_checksum }}' does not match installed binary \
+'{{ garage_computed_checksum }}'; update the pin or clear garage_checksum to degrade"
+  when:
+    - not ansible_check_mode
+    - garage_checksum
+    - garage_checksum != garage_computed_checksum
+
+- name: Announce computed checksum when garage is unpinned
+  ansible.builtin.debug:
+    msg: "garage_checksum not pinned (HTTPS-trust install). Pin this value: garage_checksum: \
+{{ garage_computed_checksum }}\nExpected --version output for pinning review: garage v{{ garage_version }}"
+  when:
+    - not ansible_check_mode
+    - not garage_checksum
+
 - name: Create garage system user
   ansible.builtin.user:
     name: "{{ garage_user }}"
