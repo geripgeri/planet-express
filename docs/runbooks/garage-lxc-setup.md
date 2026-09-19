@@ -188,20 +188,33 @@ fail with `InvalidAccessKeyId` / `SignatureDoesNotMatch`. Region must match
 
 - Garage upgrades: Renovate raises version-only PRs for `garage_version`
   (custom regex manager against git.deuxfleurs.fr tags); the garage-checksum
-  CI fills the `garage_checksum` pin. The role converges in a single run —
-  one command, no manual steps:
+  CI fills the `garage_checksum` pin. Pinned upgrade flow:
 
-  ```bash
-  ansible-playbook playbooks/bootstrap.yaml --limit garage-01 --tags garage
-  ```
+  1. Open the Renovate PR that raises `garage_version`
+
+  2. Let the garage-checksum CI download the release binary and commit the
+     matching `garage_checksum` pin into the PR
+
+  3. Review the diff, then merge the PR
+
+  4. Run the single-command convergence:
+
+     ```bash
+     ansible-playbook playbooks/bootstrap.yaml --limit garage-01 --tags garage
+     ```
+
+  5. Verify `garage status` shows the healthy node advertising the new `v`
+     version
 
   The role installs exactly `garage_version`, asserts the binary's
   `--version` matches it, and fails the run otherwise. It then restarts the
   daemon whenever `garage status` advertises a different version (the
   2.3.0-on-disk-but-2.4.1 incident), so the running process never lags the
-  pinned binary. If the CI pin is missing or you upgrade outside Renovate,
-  clear the pin and let the role pin back for you: empty `garage_checksum`
-  in `defaults/main.yaml`, or pass it inline with
+  pinned binary. Running the playbook before the pin is filled — the new
+  `garage_version` with the old `garage_checksum` still set — hard-fails at
+  the pin-mismatch guard as intended: that guard is the trust barrier.
+  Without the CI, use the degraded un-pinned path instead: empty
+  `garage_checksum` in `defaults/main.yaml`, or pass it inline with
   `--extra-vars 'garage_checksum='`.
 
   ```bash
@@ -218,9 +231,10 @@ For each scenario, run against the live node:
 `ansible-playbook playbooks/bootstrap.yaml --limit garage-01 --tags garage`,
 then confirm the result with `garage status`.
 
-(a) Pinned upgrade: bump a patch version of `garage_version`, run the
-playbook, and assert the healthy node in `garage status` reports the new
-`v` version.
+(a) Pinned upgrade: open the Renovate PR raising `garage_version`, confirm
+the garage-checksum CI committed the matching `garage_checksum` pin, merge
+the PR, run the convergence command, and assert the healthy node in
+`garage status` reports the new `v` version.
 
 (b) Idempotency: run the playbook again unchanged; expect no download and
 no daemon restart (the version and checksum are already satisfied).
