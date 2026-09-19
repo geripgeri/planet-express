@@ -37,8 +37,10 @@ jobs:
           PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
           set -euo pipefail
-          # Bot identity, same convention as tofu-lockfile.yaml. Gitea
-          # attributes the commit to the push-token account (renovate-bot).
+          # Bot identity: same user.name/user.email config Renovate itself
+          # commits with (seeded from the RENOVATE_* secrets), so the fix
+          # commit is attributed to renovate-bot and stays close to Renovate's
+          # own commit style.
           git config user.name "renovate-bot"
           git config user.email "${{ secrets.RENOVATE_EMAIL }}"
           git add ansible/roles/garage/defaults/main.yaml
