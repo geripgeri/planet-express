@@ -114,6 +114,22 @@
     enabled: true
     state: started
 
+- name: Probe Garage daemon version from cluster status
+  ansible.builtin.command: "{{ garage_binary_dest }} -c {{ garage_config_path }} status"
+  register: garage_status_probe
+  changed_when: false
+  failed_when: false
+  when: not ansible_check_mode
+
+- name: Restart garage when daemon version differs
+  ansible.builtin.systemd:
+    name: garage
+    state: restarted
+    daemon_reload: true
+  when:
+    - not ansible_check_mode
+    - garage_status_probe.stdout is not search("v" ~ garage_version)
+
 # Smoke check only: `garage node id` derives the node id from the configured
 # RPC secret and succeeds before the cluster layout is applied, so it proves
 # the binary, config, and service are healthy without touching cluster state.
