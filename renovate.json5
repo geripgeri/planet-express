@@ -288,7 +288,9 @@
 
     // Guard: Garage server upgrades NEVER auto-merge. It hosts the OpenTofu
     // remote state (ADR-010); a bad bump breaks state access for every unit.
-    // The PR also needs the manual sha256 checksum update before merge.
+    // The checksum is auto-filled on renovate-bot PRs by the garage-checksum
+    // workflow (.gitea/workflows/garage-checksum.yaml); still verify the
+    // binary during review, per docs/runbooks/garage-lxc-setup.md §6.
     // Declared last so automerge:false wins.
     {
       "matchManagers": ["custom.regex"],
