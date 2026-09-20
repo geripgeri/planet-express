@@ -77,7 +77,7 @@ GitOps loop.
 
 While Kyverno is not yet installed, pin the upstream with an interim
 **keeper CronJob**, `kubernetes/infrastructure/private/coredns-upstream/ cronjob.yaml`, that re-applies the desired Talos-rendered `coredns`
-ConfigMap (a `kubectl apply` of a fixed Corefile with `forward . <resolver1> <resolver2>`, the same upstream the manual incident patch used) every 5
+ConfigMap (a `kubectl apply` of a fixed Corefile with `forward . <resolver1>`, a single pinned resolver) every 5
 minutes. Any Talos re-render of the ConfigMap during a future upgrade is
 replaced within 5 minutes; coreDNS reloads on ConfigMap change. The path is
 export-ignored so the real LAN resolver addresses never reach the public
@@ -119,7 +119,7 @@ spec:
                       fallthrough in-addr.arpa ip6.arpa
                   }
                   prometheus :9153
-                  forward . 192.0.2.100 192.0.2.1
+                  forward . 192.0.2.100
                   cache 30
                   loop
                   reload
@@ -164,6 +164,11 @@ managed generation.
 - The keeper hardcodes the full Corefile, so future upstream changes to the
   Talos default coreDNS plugin set must be updated in the keeper (and in
   the later ClusterPolicy) too.
+- The forward pins a single resolver: the second candidate (the LAN
+  gateway's resolver) answers pod-sourced queries with a root referral
+  (rebind protection), not with LAN records, so it can never be used as an
+  upstream from coreDNS. A single resolver is the single point of failure
+  until a second, equivalent resolver exists.
 - Convergence is poll-based, not event-based: after a re-render, cluster
   DNS stays broken for up to 5 minutes until the next run. The later
   Kyverno policy closes this gap (admission-time, seconds).
