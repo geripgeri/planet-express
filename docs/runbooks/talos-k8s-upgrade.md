@@ -182,6 +182,29 @@ kubectl -n argocd rollout restart deployment/argocd-repo-server
 kubectl -n argocd rollout status deployment/argocd-repo-server
 # check apps sync
 kubectl -n argocd get applications
+
+# Cluster DNS (CoreDNS upstream) regression across upgrades
+# dnsPolicy: Default pods (CoreDNS) get nameserver 169.254.116.108 = Talos
+# hostDNS link-local socket, which has no daemon behind it after an upgrade
+# and makes all cluster DNS dead (SERVFAIL/empty answers for every record,
+# including gitea.yourdomain.internal). Talos v1.14 enables hostDNS by
+# default and its config moved to the ResolverConfig document, which the
+# pinned talos provider (0.11.0) cannot encode; disabling it needs the full
+# v1.14 document migration (see ADR-023). Fixed in the interim by the
+# coredns-upstream-keeper CronJob
+# (kubernetes/infrastructure/private/coredns-upstream/cronjob.yaml;
+# export-ignored, carries the real resolver IPs) that re-applies the pinned
+# coreDNS ConfigMap every 5 minutes, so any re-render during an upgrade
+# self-heals. Sanitized TEST-NET example in ADR-023. Once Kyverno lands
+# (ADR-014), the keeper is replaced by a ClusterPolicy (form in ADR-023).
+# No manual CM edit needed after this fix lands.
+# Verify the keeper pinned a forward upstream into the Talos-rendered
+# ConfigMap and that CoreDNS resolves through it (hostDNS socket stays
+# inert). The grep deliberately matches any forward . line, not real IPs:
+kubectl -n kube-system get cronjob coredns-upstream-keeper
+kubectl -n kube-system get cm coredns -o jsonpath='{.data.Corefile}' | grep -c 'forward . '   # expect 1
+kubectl run dnsok --rm -i --restart=Never --image=busybox:1.36 -- nslookup gitea.yourdomain.internal   # expect the internal A record
+kubectl -n kube-system get pods -l k8s-app=kube-dns   # coredns pods Running, upstream healthy
 ```
 
 ## 7. If upgrade fails / cluster unhealthy
