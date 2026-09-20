@@ -40,6 +40,32 @@ resource "helm_release" "argocd" {
       notifications = {
         enabled = false
       }
+      repoServer = {
+        livenessProbe = {
+          httpGet = {
+            path   = "/healthz"
+            port   = "repo-server"
+            scheme = "HTTP"
+          }
+          failureThreshold    = 3
+          initialDelaySeconds = 10
+          periodSeconds       = 10
+          successThreshold    = 1
+          timeoutSeconds      = 1
+        }
+        readinessProbe = {
+          httpGet = {
+            path   = "/healthz"
+            port   = "repo-server"
+            scheme = "HTTP"
+          }
+          failureThreshold    = 3
+          initialDelaySeconds = 10
+          periodSeconds       = 10
+          successThreshold    = 1
+          timeoutSeconds      = 1
+        }
+      }
     })
   ]
 

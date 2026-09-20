@@ -93,17 +93,21 @@ Commit + push + merge per phase (normal PR flow), then pull `main`.
 
 ```bash
 cd infrastructure/units/public/proxmox/talos-vms
-terragrunt plan          # expect: 0 add, 4 change (IP re-probe), 0 destroy
+terragrunt plan          # expect: no changes (static IP reservations are stable
+                         # since the 2026-08-29 incident fix; no more IP re-probe)
 
-cd ../talos/talos-cluster
-terragrunt plan          # expect: null_resource replaces (upgrade triggers),
-                         # in-place: machine_secrets + kubeconfig + 4 config applies
+cd infrastructure/units/public/talos/talos-cluster
+terragrunt plan          # expect: 2 add + 2 destroy (null_resource.rolling_upgrade
+                         # and null_resource.verify_upgrade replaced) +
+                         # 4 change (talos_machine_configuration_apply in-place)
 ```
 
-Expected plan (sanity check):
+Expected plan (sanity check; observed on PR 88, Talos v1.14.0 -> v1.14.1, 2026-09):
 
-- `-/+` only on `null_resource.*` (installer-image / config-hash triggers)
-- `~` on `talos_cluster_kubeconfig`, `talos_machine_configuration_apply` ×4
+- `-/+` on `null_resource.rolling_upgrade` and `null_resource.verify_upgrade`
+- `~` on `talos_machine_configuration_apply` ×4
+- `talos_cluster_kubeconfig` NOT in plan (unchanged while `machine_secrets_version`
+  is pinned)
 - `talos_machine_secrets` NOT in plan (version pinned to bootstrap; secrets
   never regenerate - if it appears, `machine_secrets_version` was bumped)
 - `talos_image_factory_schematic` NOT in plan (IDs are version-independent)
@@ -173,6 +177,9 @@ talosctl -n <controller-ip> version  # v1.14.0
 # ArgoCD auth (SA token invalidated by new signing key)
 kubectl -n argocd rollout restart deployment/argocd-server
 kubectl -n argocd rollout status deployment/argocd-server
+# repo-server liveness probe on metrics port (8084) may fail under K8s 1.37
+kubectl -n argocd rollout restart deployment/argocd-repo-server
+kubectl -n argocd rollout status deployment/argocd-repo-server
 # check apps sync
 kubectl -n argocd get applications
 ```
