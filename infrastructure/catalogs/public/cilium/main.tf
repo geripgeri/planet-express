@@ -57,12 +57,18 @@ locals {
     routingMode           = "native"
     autoDirectNodeRoutes  = true
 
-    # Disable masquerading — Talos handles NAT; BPF masquerading
-    # conflicts with the MikroTik network topology.
+    # Masquerade default-pool pod egress so LAN targets reply symmetrically.
+    # Native BPF direct routing (routingMode native + autoDirectNodeRoutes)
+    # bypasses netfilter, so only BPF masquerade applies and it must be
+    # enabled explicitly; otherwise pods egress un-masqueraded (source
+    # 10.244.x) and LAN-host replies die on the return path, breaking e.g.
+    # ArgoCD -> gitea. The routed-via-vpn pool (raw pod IPs via the MikroTik
+    # wg-vpn SNAT) is unaffected: per-pool masquerade exclusions do not exist
+    # in the Cilium 1.17.6 chart (the note in vpn-zone.yaml is stale).
     bpf = {
-      masquerade = false
+      masquerade = true
     }
-    enableIPv4Masquerade = false
+    enableIPv4Masquerade = true
 
     # Talos hardens bounding caps: SYS_MODULE not in allowed set, so the
     # chart default cleanCiliumState (NET_ADMIN,SYS_MODULE,SYS_ADMIN,SYS_RESOURCE)
