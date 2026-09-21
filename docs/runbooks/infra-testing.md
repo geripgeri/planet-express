@@ -79,6 +79,7 @@ vmid/name/uptime/node/type shape as `/cluster/resources`. Two PVE details:
 - `/cluster/resources` is a restricted route. Without cluster-wide audit
   privileges PVE answers `501 Method 'GET ...' not implemented`, not 403: a
   deliberate mask, so denied access looks like a non-existent endpoint.
+
 - Reading a single pool (`GET /pools/{poolid}`) is NOT granted by pool
   membership alone. It needs the `Pool.Audit` privilege on `/pool/ci-tests`
   (`Pool.Allocate` only covers creating and editing pools, not reading them).
@@ -86,6 +87,16 @@ vmid/name/uptime/node/type shape as `/cluster/resources`. Two PVE details:
   live sweep run hit the second: `ci-tests` did not exist (only `ci-runner`,
   empty) and PVE answered 501. Fix it in step 3 below, then re-run `--dry-run`
   before relying on the sweep.
+
+  The pool is the only guest list the ci-runner token can read: the
+  cluster-wide `/cluster/resources` route is masked as 501 for it. A guest
+  outside `ci-tests` is never swept. telmate never places a created guest
+  into a pool, so the live harnesses
+  (`infrastructure/tests/live/{vm,lxc}/main.tf`) enrol theirs with a
+  `POST /pools/ci-tests` right after apply. That POST needs
+  `Pool.Allocate` on `/pool/ci-tests` (add it to the ci-runner role, step
+  3\) plus `VM.Allocate` on the guest's vmid, which the runner already
+  holds from creating it.
 
 ## One-time self-hosted runner setup checklist
 
@@ -104,7 +115,10 @@ vmid/name/uptime/node/type shape as `/cluster/resources`. Two PVE details:
    its `members` list, and a missing pool id makes PVE answer 501). Add
    `Pool.Audit` on `/pool/ci-tests` to that role (`Pool.Allocate` covers
    pool create/edit/delete only, so it does not help the read). Assign
-   the live-tier guests into the pool so the sweep can see them.
+   `Pool.Allocate` on the same path as well: the harnesses enrol each new
+   guest with a `POST /pools/ci-tests`, which is the write `Pool.Allocate`
+   grants. Both privileges put every live-tier guest (fresh and leftover)
+   in the pool, where the sweep sees it.
 4. Age: generate a dedicated keypair; add its public key to the
    recipients in `.sops.yaml` creation rules; re-encrypt
    `infrastructure/secrets.yaml` (sops rotate -i -r).
@@ -114,7 +128,9 @@ vmid/name/uptime/node/type shape as `/cluster/resources`. Two PVE details:
 ## Current gaps
 
 - The VM live harness boots hardware without an installer ISO. It proves
-  catalog wiring, not guest OS health. Guest-agent-based assertions are a
+  catalog wiring, not guest OS health. The empty disk means the guest never
+  reaches a bootable state, so the harness copes two ways: `force_create = true` recycles a leftover on vmid 5901 instead of failing the run, and
+  pool enrolment sweeps it within 6h. Guest-agent-based assertions are a
   possible follow-up.
 - The live VM fixture pins a static MAC (`bc:24:11:2a:3b:4c`). A leaked
   vmid-5901 guest can ARP-conflict until the sweep removes it (≤6h
@@ -188,12 +204,13 @@ The `tofu-apply` workflow then, on every push to `main` that touches
 
 ## Verification history
 
-| Date       | Check                                                  | Result                                                                                                               |
-| ---------- | ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
-| 2026-09-06 | Sweep dry-run live (first run)                         | failed 501: pool `ci-tests` did not exist (only `ci-runner`, empty); create pool, grant `Pool.Audit`, retry          |
-| 2026-09-07 | Sweep dry-run live (base URL with `/api2/json` suffix) | pass: `no stale test guests found`; the trailing `/api2/json` segment in `PROXMOX_API_URL` is stripped by the script |
-| 2026-09-07 | L1/L2 green in CI                                      | pass: static/unit tiers on the LAN runner; static tflint `-c` config bug fixed in this PR (re-run after merge)       |
-| 2026-09-07 | L4 dispatch creates+destroys both guests               | pass                                                                                                                 |
-| 2026-09-07 | Sweep destroys planted tftest-orphan (5999)            | pass                                                                                                                 |
+| Date       | Check                                                  | Result                                                                                                                                                                                                                            |
+| ---------- | ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-09-06 | Sweep dry-run live (first run)                         | failed 501: pool `ci-tests` did not exist (only `ci-runner`, empty); create pool, grant `Pool.Audit`, retry                                                                                                                       |
+| 2026-09-07 | Sweep dry-run live (base URL with `/api2/json` suffix) | pass: `no stale test guests found`; the trailing `/api2/json` segment in `PROXMOX_API_URL` is stripped by the script                                                                                                              |
+| 2026-09-07 | L1/L2 green in CI                                      | pass: static/unit tiers on the LAN runner; static tflint `-c` config bug fixed in this PR (re-run after merge)                                                                                                                    |
+| 2026-09-07 | L4 dispatch creates+destroys both guests               | pass                                                                                                                                                                                                                              |
+| 2026-09-07 | Sweep destroys planted tftest-orphan (5999)            | pass                                                                                                                                                                                                                              |
+| 2026-09-13 | Nightly live: `vmId: 5901 already in use`              | fail: a leftover 5901 from a broken teardown went unswept. telmate never pools guests and the catalog had no `force_create`. Fixed by `force_create = true` plus harness enrolment into `ci-tests`; step 3 grants `Pool.Allocate` |
 
 Update this table as tiers go live.
