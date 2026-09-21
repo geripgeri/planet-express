@@ -20,6 +20,9 @@ resource "proxmox_vm_qemu" "this" {
   name        = each.key
   target_node = var.vm_details.target_node
   vmid        = each.value.vmid
+  # A leftover guest on a reserved vmid is recycled when the fixture opts in;
+  # without this, telmate aborts with "vmId already in use. Set force_create=true to recycle".
+  force_create = each.value.force_create
 
   # Basic VM settings here. agent refers to guest agent
   agent         = var.vm_details.agent_number

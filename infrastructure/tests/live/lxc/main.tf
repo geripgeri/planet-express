@@ -11,6 +11,10 @@ terraform {
       # Version tracked here: see infrastructure/catalogs/public/lxc/main.tf
       version = "3.0.2-rc10"
     }
+    null = {
+      source  = "opentofu/null"
+      version = "3.3.2"
+    }
   }
 }
 
@@ -88,5 +92,37 @@ module "under_test" {
     ssh_public_keys = ""
     start           = true
     onboot          = false
+  }
+}
+
+# The sweep backstop reads ONLY /pools/ci-tests members; telmate never places a
+# created guest into a pool, so a leftover would stay invisible to it forever.
+# Enrol the guest as soon as it exists so a missed teardown is swept within 6h.
+# ci-runner@pve needs Pool.Allocate on /pool/ci-tests for the POST (and
+# VM.Allocate on the vmid, which it already holds from creating the guest).
+resource "null_resource" "enroll_in_ci_tests_pool" {
+  triggers = {
+    vmid = module.under_test.vmids["tftest-live-lxc"]
+  }
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      python3 -c '
+      import sys, ssl, urllib.parse, urllib.request
+      base, vmid, tid, sec = sys.argv[1:]
+      req = urllib.request.Request(
+          base.rstrip("/") + "/api2/json/pools/ci-tests",
+          data=urllib.parse.urlencode({"vms": "lxc:" + vmid}).encode(),
+          headers={"Authorization": "PVEAPIToken=" + tid + "=" + sec},
+          method="POST",
+      )
+      with urllib.request.urlopen(req, timeout=30, context=ssl._create_unverified_context()) as resp:
+          resp.read()
+      ' "${trim(trimsuffix(trim(var.pm_api_url, "/"), "/api2/json"), "/")}" "${module.under_test.vmids["tftest-live-lxc"]}" "$PM_TOKEN_ID" "$PM_TOKEN_SECRET"
+    EOT
+    environment = {
+      PM_TOKEN_ID     = var.pm_api_token_id
+      PM_TOKEN_SECRET = var.pm_api_token_secret
+    }
   }
 }

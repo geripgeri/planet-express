@@ -14,6 +14,10 @@ terraform {
       source  = "opentofu/random"
       version = "3.9.0"
     }
+    null = {
+      source  = "opentofu/null"
+      version = "3.3.2"
+    }
   }
 }
 
@@ -67,6 +71,9 @@ module "under_test" {
       additional_disk_capacity = null
       name                     = null
       vmid                     = 5901
+      # A leftover guest on this reserved vmid is recycled (telmate adopts and
+      # reconfigures it) instead of aborting with "vmId already in use".
+      force_create = true
       # telmate 3.0.2-rc07+ rejects the "" that the catalog maps a null
       # macaddr to, so the fixture pins a valid address.
       macaddr                 = "bc:24:11:2a:3b:4c"
@@ -93,5 +100,37 @@ module "under_test" {
     storage            = "local-lvm"
     ipconfig           = "ip=dhcp"
     nameserver         = "192.0.2.53"
+  }
+}
+
+# The sweep backstop reads ONLY /pools/ci-tests members; telmate never places a
+# created guest into a pool, so a leftover would stay invisible to it forever.
+# Enrol the guest as soon as it exists so a missed teardown is swept within 6h.
+# ci-runner@pve needs Pool.Allocate on /pool/ci-tests for the POST (and
+# VM.Allocate on the vmid, which it already holds from creating the guest).
+resource "null_resource" "enroll_in_ci_tests_pool" {
+  triggers = {
+    vmid = module.under_test.vmids["tftest-live-vm"]
+  }
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      python3 -c '
+      import sys, ssl, urllib.parse, urllib.request
+      base, vmid, tid, sec = sys.argv[1:]
+      req = urllib.request.Request(
+          base.rstrip("/") + "/api2/json/pools/ci-tests",
+          data=urllib.parse.urlencode({"vms": "qemu:" + vmid}).encode(),
+          headers={"Authorization": "PVEAPIToken=" + tid + "=" + sec},
+          method="POST",
+      )
+      with urllib.request.urlopen(req, timeout=30, context=ssl._create_unverified_context()) as resp:
+          resp.read()
+      ' "${trim(trimsuffix(trim(var.pm_api_url, "/"), "/api2/json"), "/")}" "${module.under_test.vmids["tftest-live-vm"]}" "$PM_TOKEN_ID" "$PM_TOKEN_SECRET"
+    EOT
+    environment = {
+      PM_TOKEN_ID     = var.pm_api_token_id
+      PM_TOKEN_SECRET = var.pm_api_token_secret
+    }
   }
 }

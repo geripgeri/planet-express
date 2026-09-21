@@ -24,6 +24,10 @@ variable "vms" {
     vcores                   = number
     vram                     = number
     tags                     = string
+    # Recycle an existing guest that already holds this vmid instead of
+    # failing with "vmId already in use". Test fixtures enable it; production
+    # units keep the default (import via state, never blind reuse).
+    force_create = optional(bool, false)
   }))
 }
 
