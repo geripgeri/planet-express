@@ -4,7 +4,7 @@
 - **Status**: Resolved, fixes applied
 - **Component**: Cluster DNS (coreDNS upstream), Talos v1.14 hostDNS default
 - **Severity**: Full cluster DNS outage, GitOps loop stopped (all ArgoCD applications `Unknown`)
-- **Duration**: Intermittent for one day (Aug 20 upgrade), permanently fixed 2026-09-20
+- **Duration**: One day (Sep 20 upgrade), permanently fixed the same day
 
 ## Summary
 
@@ -26,14 +26,12 @@ ClusterPolicy once Kyverno is installed (see [ADR-023](../decisions/ADR-023-core
 
 ## Timeline
 
-- **2026-08-20**: Upgrade to Talos `v1.14.0` / K8s `1.37.0`. Cluster DNS
-  becomes intermittently broken; ArgoCD applications go `Unknown`,
-  cert-manager stalls, the GitOps loop stops.
-- **2026-08-20 … 09-20**: Intermittent DNS flapping. Direct queries from
-  nodes and `busybox` pods against the resolvers always succeed; queries
-  via coreDNS sometimes return `NOERROR` with zero answers, sometimes
-  `SERVFAIL`.
-- **2026-09-20**:
+- **2026-09-20**: Upgrade to Talos `v1.14.0` / K8s `1.37.0`. Cluster DNS
+  breaks and flaps all day; ArgoCD applications go `Unknown`, cert-manager
+  stalls, the GitOps loop stops.
+  - Direct queries from nodes and `busybox` pods against the resolvers
+    always succeed; queries via coreDNS sometimes return `NOERROR` with
+    zero answers, sometimes `SERVFAIL`.
   - Direct `getent hosts` per node against the resolver succeeds on all
     four nodes — not a source-IP ACL.
   - A `dnsPolicy: Default` pod shows `nameserver 169.254.116.108`; a direct
@@ -91,6 +89,13 @@ While probing, coreDNS intermittently returned `NOERROR` with zero answers
 while direct lookups worked. This was AdGuard Home rate-limiting per `/24`
 during the probe burst, not a cluster fault — but it diluted attention
 away from the real breakage.
+
+Related: this v1.13 → v1.14 upgrade changed a second datapath default
+beyond hostDNS — egress SNAT. The cluster had shipped with
+`enableIPv4Masquerade=false` pinned on the assumption that "Talos handles
+NAT"; the v1.14 upgrade stopped that assumption holding, and pod → LAN
+egress broke. Fixed by re-enabling BPF masquerade (`fix/cilium-masquerade-lan`). v1.14 changed several default behaviors at once; verify the
+datapath (DNS and NAT), not just DNS, after any upgrade.
 
 ## Detection
 
