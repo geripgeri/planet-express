@@ -145,7 +145,7 @@ def resolve_catalog_dir(
 def find_units(units_dir: Path) -> list[Path]:
     units: list[Path] = []
     for tg_file in units_dir.rglob("terragrunt.hcl"):
-        if ".terragrunt-stack" in tg_file.parts:
+        if ".terragrunt-stack" in tg_file.parts or ".terragrunt-cache" in tg_file.parts:
             continue
         text = tg_file.read_text(encoding="utf-8")
         for block in _extract_blocks(text, "terraform"):

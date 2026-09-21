@@ -195,6 +195,18 @@ def test_find_units_skips_terragrunt_stack(tmp_path):
     assert found == [unit]
 
 
+def test_find_units_skips_terragrunt_cache(tmp_path):
+    _catalog(tmp_path)
+    unit = _unit(tmp_path)
+    cache = unit / ".terragrunt-cache" / "AbCd" / "1234" / "proxmox" / "talos-vms"
+    cache.mkdir(parents=True)
+    (cache / "terragrunt.hcl").write_text(
+        'terraform {\n  source = "nope"\n}\n', encoding="utf-8"
+    )
+    found = find_units(tmp_path / "infrastructure" / "units")
+    assert found == [unit]
+
+
 def test_find_units_ignores_units_without_source(tmp_path):
     _catalog(tmp_path)
     _unit(tmp_path)
