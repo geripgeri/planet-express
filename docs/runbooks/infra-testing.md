@@ -155,9 +155,46 @@ kubeconfig, once:
 
 The granted access is read-only: namespaces cluster-wide, Secrets inside
 `argocd`/`cert-manager`, and `argoproj.io` Applications inside `argocd`.
-No write verbs anywhere — plan only. A future `apply` phase needs a second
-identity with write verbs on those same resources; plan it then, not by
-widening this one.
+No write verbs anywhere — plan only. The apply phase uses a separate
+identity (next section); never widen this one.
+
+## CI apply identity (first-time host apply)
+
+The `tofu-apply` workflow applies the exact plan binaries from the matching
+`tofu-plan` run after a PR merges. It authenticates with a second kubeconfig.
+The unit `infrastructure/units/public/ci/ci-apply` provisions that identity
+(ServiceAccount `ci-apply`, token Secret, ClusterRoleBinding to
+`cluster-admin`) and emits the ready kubeconfig as an output. Like `ci-plan`,
+it is a **standalone unit — it must never join a stack**: giving the runner
+the rights to re-apply its own credentials would be a self-escalation vector.
+`cluster-admin` is deliberate: the workflow applies every stack, so it needs
+the same reach as a host apply; the merge to `main` is the approval gate.
+
+Prerequisite: the `ci-plan` unit must be applied first (it creates the
+`ci-system` namespace). Apply from a workstation that holds the talosctl
+admin kubeconfig:
+
+1. In `infrastructure/units/public/ci/ci-apply`, with the host kubeconfig
+   active in `~/.kube/config` and `SOPS_AGE_KEY` exported:
+   `terragrunt apply`.
+2. Read the kubeconfig: `terragrunt output -raw kubeconfig`. If the token
+   is empty, wait a few seconds and re-run
+   `terragrunt output --refresh-only -raw kubeconfig`.
+3. Store the base64 blob as the Gitea repo secret `KUBECONFIG_APPLY`. The
+   workflow refuses to run without it.
+
+The `tofu-apply` workflow then, on every push to `main` that touches
+`infrastructure/`:
+
+1. Resolves the merged PR for the push commit (fails unless exactly one
+   matches) and takes its head SHA.
+2. Downloads the PR run's `tofu-plans` artifact and checks
+   `plan-shas.txt` equals the PR head, no stack failed at plan time, and
+   `infrastructure/` is unchanged between PR head and merge commit.
+3. Runs `terragrunt stack run apply --out-dir` per stack with the saved
+   plan binaries, after a pre-check that every generated unit has a plan
+   binary (`stack run apply` does not restrict unit discovery to the
+   out-dir).
 
 ## Verification history
 

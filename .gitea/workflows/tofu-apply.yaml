@@ -1,0 +1,231 @@
+name: Tofu Apply
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'infrastructure/**'
+      - '.gitea/workflows/tofu-apply.yaml'
+
+# One apply at a time; never cancel a run that is mid-apply.
+concurrency:
+  group: tofu-apply
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up OpenTofu
+        uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: v1.12.6
+
+      - name: Set up terragrunt
+        run: |
+          set -euo pipefail
+          curl -sfL \
+            https://github.com/gruntwork-io/terragrunt/releases/download/v1.1.2/terragrunt_linux_amd64 \
+            -o /usr/local/bin/terragrunt
+          chmod +x /usr/local/bin/terragrunt
+
+      - name: Set up sops
+        run: |
+          set -euo pipefail
+          curl -sfL \
+            https://github.com/getsops/sops/releases/download/v3.13.3/sops-v3.13.3.linux.amd64 \
+            -o /usr/local/bin/sops
+          chmod +x /usr/local/bin/sops
+
+      - name: Set up jq
+        run: |
+          set -euo pipefail
+          curl -sfL \
+            https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-linux-amd64 \
+            -o /usr/local/bin/jq
+          chmod +x /usr/local/bin/jq
+
+      - name: Stage the runner age key
+        env:
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
+        run: |
+          set -euo pipefail
+          install -m 600 /dev/null /tmp/runner.agekey
+          printf '%s\n' "$SOPS_AGE_KEY" > /tmp/runner.agekey
+
+      - name: Resolve merged PR and download plan artifact
+        id: resolve
+        env:
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+          SERVER_URL: ${{ github.server_url }}
+          REPO: ${{ github.repository }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+
+          # 1. The push commit must be the merge commit of exactly one PR.
+          api() { curl -fsSL -H "Authorization: token $GITEA_TOKEN" "$@"; }
+          prs=$(api "$SERVER_URL/api/v1/repos/$REPO/pulls?state=closed&page=1&limit=50")
+          match=$(jq -c --arg sha "$GITHUB_SHA" \
+            '[.[] | select(.merge_commit_sha == $sha)]' <<< "$prs")
+          count=$(jq 'length' <<< "$match")
+          if [ "$count" -ne 1 ]; then
+            echo "::error::Expected exactly 1 merged PR for $GITHUB_SHA, found $count"
+            exit 1
+          fi
+          PR_NUM=$(jq -r '.[0].number' <<< "$match")
+          PR_HEAD_SHA=$(jq -r '.[0].head.sha' <<< "$match")
+          head_ref=$(jq -r '.[0].head.ref' <<< "$match")
+          echo "Merged PR #$PR_NUM head=$PR_HEAD_SHA"
+          printf '%s\n' "$PR_HEAD_SHA" > "$GITHUB_WORKSPACE/pr-head-sha.txt"
+          echo "pr_num=$PR_NUM" >> "$GITHUB_OUTPUT"
+          echo "pr_head_sha=$PR_HEAD_SHA" >> "$GITHUB_OUTPUT"
+
+          # 2. Materialize the PR head commit for the staleness guard.
+          if ! git fetch --no-tags origin "+refs/pull/$PR_NUM/head:refs/pull/$PR_NUM/head" 2>/dev/null; then
+            git fetch --no-tags origin "+refs/heads/$head_ref:refs/pull/$PR_NUM/head"
+          fi
+          got=$(git rev-parse "refs/pull/$PR_NUM/head")
+          if [ "$got" != "$PR_HEAD_SHA" ]; then
+            echo "::error::PR head mismatch: want $PR_HEAD_SHA, got $got"
+            exit 1
+          fi
+
+          # 3. The plan must cover this exact commit.
+          git diff --quiet "$PR_HEAD_SHA" "$GITHUB_SHA" -- infrastructure/ || {
+            echo "::error::infrastructure/ differs between PR head $PR_HEAD_SHA and merge $GITHUB_SHA; plan binaries are stale"
+            exit 1
+          }
+
+          # 4. Find the unexpired tofu-plans artifact for the PR head sha.
+          resp=$(api "$SERVER_URL/api/v1/repos/$REPO/actions/artifacts?page=1&limit=50")
+          arts=$(jq -c --arg sha "$PR_HEAD_SHA" '
+            (if type == "array" then . else (.artifacts // []) end)
+            | map(select(
+                .name == "tofu-plans"
+                and ((.expired // false) | not)
+                and (.workflow_run.head_sha? == $sha)
+              ))' <<< "$resp")
+          count=$(jq 'length' <<< "$arts")
+          if [ "$count" -ne 1 ]; then
+            echo "::error::Expected exactly 1 tofu-plans artifact for $PR_HEAD_SHA, found $count"
+            exit 1
+          fi
+          art_id=$(jq -r '.[0].id' <<< "$arts")
+
+          # 5. Download and extract the artifact.
+          api -L -o "$GITHUB_WORKSPACE/tofu-plans.zip" \
+            "$SERVER_URL/api/v1/repos/$REPO/actions/artifacts/$art_id/zip"
+          unzip -q "$GITHUB_WORKSPACE/tofu-plans.zip" -d "$GITHUB_WORKSPACE/artifact"
+          ART_DIR="$GITHUB_WORKSPACE/artifact"
+          if [ ! -f "$ART_DIR/plan-shas.txt" ]; then
+            found=$(find "$ART_DIR" -name plan-shas.txt | head -1)
+            if [ -z "$found" ]; then
+              echo "::error::plan-shas.txt missing from artifact"
+              exit 1
+            fi
+            ART_DIR=$(dirname "$found")
+          fi
+          echo "art_dir=$ART_DIR" >> "$GITHUB_OUTPUT"
+
+          if ! grep -qx "$PR_HEAD_SHA" "$ART_DIR/plan-shas.txt"; then
+            echo "::error::plan-shas.txt does not match PR head $PR_HEAD_SHA"
+            cat "$ART_DIR/plan-shas.txt"
+            exit 1
+          fi
+          if [ -s "$ART_DIR/failed-stacks.txt" ]; then
+            echo "::error::tofu-plan run had failed stacks; refusing to apply"
+            cat "$ART_DIR/failed-stacks.txt"
+            exit 1
+          fi
+          if [ ! -f "$ART_DIR/stacks.txt" ]; then
+            echo "::error::stacks.txt missing from artifact"
+            exit 1
+          fi
+
+          mkdir -p "$GITHUB_WORKSPACE/plans"
+          for t in "$ART_DIR"/tofu-plans-*.tar.gz; do
+            [ -f "$t" ] || { echo "::error::no plan tarballs in artifact"; exit 1; }
+            tar -xzf "$t" -C "$GITHUB_WORKSPACE/plans"
+          done
+          cp "$ART_DIR/stacks.txt" "$GITHUB_WORKSPACE/stacks.txt"
+          echo "Plan artifact verified for PR #$PR_NUM ($PR_HEAD_SHA)"
+
+      - name: Stage the CI kubeconfig
+        env:
+          KUBECONFIG_APPLY: ${{ secrets.KUBECONFIG_APPLY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${KUBECONFIG_APPLY:-}" ]; then
+            echo "::error::KUBECONFIG_APPLY secret is not set (runbook: CI apply identity)"
+            exit 1
+          fi
+          mkdir -p "$HOME/.kube"
+          printf '%s' "$KUBECONFIG_APPLY" | base64 -d > "$HOME/.kube/config"
+          chmod 600 "$HOME/.kube/config"
+
+      - name: Apply stacks
+        env:
+          SOPS_AGE_KEY_FILE: /tmp/runner.agekey
+          PR_HEAD_SHA: ${{ steps.resolve.outputs.pr_head_sha }}
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          stacks=$(cat stacks.txt)
+          echo "Applying stacks for PR head $PR_HEAD_SHA:"
+          echo "$stacks"
+          fail=0
+          : > "$GITHUB_WORKSPACE/failed-stacks.txt"
+          while IFS= read -r stack; do
+            [ -n "$stack" ] || continue
+            echo "::group::Apply $stack"
+            name="$(basename "$stack")"
+            cd "$GITHUB_WORKSPACE/$stack"
+
+            # stack run apply --out-dir does NOT restrict unit discovery.
+            # Pre-check every generated unit has a plan binary, or a unit
+            # missing from the artifact would plan+apply fresh.
+            terragrunt stack generate
+            missing=0
+            while IFS= read -r unit_hcl; do
+              unit_dir=$(dirname "$unit_hcl")
+              rel=${unit_dir#"$GITHUB_WORKSPACE/$stack/.terragrunt-stack/"}
+              pf="$GITHUB_WORKSPACE/plans/$name/$rel/tfplan.tfplan"
+              if [ ! -f "$pf" ]; then
+                echo "::error::Missing plan binary for unit $rel in stack $name"
+                missing=1
+              fi
+            done < <(find "$GITHUB_WORKSPACE/$stack/.terragrunt-stack" -name terragrunt.hcl -type f)
+            if [ "$missing" -ne 0 ]; then
+              echo "::error::Stack $name: plan artifact incomplete, refusing to apply"
+              printf '%s\n' "$name" >> "$GITHUB_WORKSPACE/failed-stacks.txt"
+              fail=1
+              echo "::endgroup::"
+              cd "$GITHUB_WORKSPACE"
+              continue
+            fi
+
+            terragrunt stack run apply --out-dir "$GITHUB_WORKSPACE/plans/$name" --log-level info \
+              > "$GITHUB_WORKSPACE/apply-$name.log" 2>&1 \
+              || { fail=1; printf '%s\n' "$name" >> "$GITHUB_WORKSPACE/failed-stacks.txt"; }
+            cat "$GITHUB_WORKSPACE/apply-$name.log"
+            echo "::endgroup::"
+            cd "$GITHUB_WORKSPACE"
+          done <<< "$stacks"
+          exit $fail
+
+      - name: Remove the staged age key
+        if: ${{ always() }}
+        run: shred -u /tmp/runner.agekey
