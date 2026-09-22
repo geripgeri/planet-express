@@ -9,3 +9,5 @@ terraform.tfstate.d/               export-ignore
 # so the mirror filter scrubs the old public-path history on GitHub.
 # Do not delete while any public mirror history may still reference it.
 kubernetes/infrastructure/longhorn/   export-ignore
+kubernetes/infrastructure/authentik/httproute.yaml   export-ignore
+infrastructure/stacks/public/authentik/terragrunt.stack.hcl   export-ignore

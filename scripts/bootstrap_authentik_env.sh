@@ -82,6 +82,17 @@ fill_plain() {
   UPDATED=$((UPDATED + 1))
 }
 
+fill_plain() {
+  local file="$1"
+  local token="$2"
+  local value="$3"
+  local tmp
+  tmp="$(mktemp)"
+  sed -e "s|$(esc "$token")|$(esc "$value")|g" "$file" >"$tmp"
+  mv "$tmp" "$file"
+  UPDATED=$((UPDATED + 1))
+}
+
 GARAGE_HOST="$(extract '["network_config"]["garage_lxc"]["ip"]' || true)"
 GARAGE_AK="$(extract '["garage"]["s3"]["access_key_id"]' || true)"
 GARAGE_SK="$(extract '["garage"]["s3"]["secret_access_key"]' || true)"
