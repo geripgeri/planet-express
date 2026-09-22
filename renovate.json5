@@ -7,10 +7,18 @@
 
   // Automerge only after the Tofu Lockfile workflow is green: provider bumps
   // drift the unit lockfiles, and .gitea/workflows/tofu-lockfile.yaml commits
-  // the regenerated .terraform.lock.hcl back to the PR branch. Without the
-  // gate Renovate auto-merges as soon as the branch is up to date, before the
-  // fix lands. The status context is the workflow job name. If the tofu-plan
-  // check should also block automerge, add "plan" to this list.
+  // the regenerated .terraform.lock.hcl back to the PR branch.
+  //
+  // Renovate 44 deprecated requiredStatusChecks (array form is stripped by
+  // migration; only null -> ignoreTests is handled). Renovate itself waits
+  // for every status on the branch to be green. The tofu-lockfile workflow
+  // therefore has no on.paths filter: it always runs and always posts the
+  // "lockfile" job status, so infra PRs gate on the real check and other
+  // PRs are not stuck on a check that never appears (PR #122).
+  //
+  // fry's risk tool still reads this list for "missing required checks".
+  // Status context on Gitea is "Tofu Lockfile / lockfile (pull_request)";
+  // fry matches by substring ("lockfile" in context).
   "requiredStatusChecks": ["lockfile"],
 
   "extends": ["config:recommended"],

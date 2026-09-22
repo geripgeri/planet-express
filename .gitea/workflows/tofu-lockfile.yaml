@@ -1,11 +1,12 @@
 name: Tofu Lockfile
 
+# No on.paths filter: renovate.json5 requiredStatusChecks and the fry risk
+# tool both expect a "lockfile" status on every PR. Path-filtered runs never
+# post that status, so non-infrastructure PRs (e.g. setup-uv) sit forever
+# with a missing required check (PR #122). Heavy work is gated in-job instead.
 on:
   pull_request:
     branches: [ main ]
-    paths:
-      - 'infrastructure/**'
-      - '.gitea/workflows/tofu-lockfile.yaml'
 
 concurrency:
   group: tofu-lockfile-${{ github.event.pull_request.number }}
@@ -29,15 +30,36 @@ jobs:
           # attributed to the bot, not a human account, and keeps the branch as
           # close to Renovate's own as possible. RENOVATE_TOKEN must have
           # write:repository (Renovate itself pushes with it).
+          # fetch-depth 0: the change detector diffs against the PR base SHA.
           ref: ${{ github.event.pull_request.head.ref }}
           token: ${{ secrets.RENOVATE_TOKEN }}
+          fetch-depth: 0
+
+      - name: Detect infrastructure changes
+        id: changes
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          if git diff --quiet "$BASE_SHA" HEAD -- \
+            infrastructure \
+            .gitea/workflows/tofu-lockfile.yaml
+          then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "No infrastructure changes; skipping lockfile regeneration."
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "Infrastructure changes detected; regenerating lockfiles."
+          fi
 
       - name: Set up OpenTofu
+        if: steps.changes.outputs.run == 'true'
         uses: opentofu/setup-opentofu@v1
         with:
           tofu_version: v1.12.6
 
       - name: Set up terragrunt
+        if: steps.changes.outputs.run == 'true'
         run: |
           set -euo pipefail
           curl -sfL \
@@ -46,14 +68,16 @@ jobs:
           chmod +x /usr/local/bin/terragrunt
 
       - name: Set up sops
+        if: steps.changes.outputs.run == 'true'
         run: |
           set -euo pipefail
           curl -sfL \
-            https://github.com/getsops/sops/releases/download/v3.13.3/sops-v3.13.3.linux.amd64 \
+            https://github.com/getsops/sops/releases/download/v3.13.3/sops-v3.13.3.linux_amd64 \
             -o /usr/local/bin/sops
           chmod +x /usr/local/bin/sops
 
       - name: Stage the runner age key
+        if: steps.changes.outputs.run == 'true'
         env:
           SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
         run: |
@@ -62,6 +86,7 @@ jobs:
           printf '%s\n' "$SOPS_AGE_KEY" > /tmp/runner.agekey
 
       - name: Regenerate drifting provider lockfiles
+        if: steps.changes.outputs.run == 'true'
         env:
           SOPS_AGE_KEY_FILE: /tmp/runner.agekey
         run: |
@@ -69,6 +94,7 @@ jobs:
           python3 scripts/check_provider_locks.py --fix
 
       - name: Commit lockfile fixes back to the PR branch
+        if: steps.changes.outputs.run == 'true'
         env:
           SOPS_AGE_KEY_FILE: /tmp/runner.agekey
           PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
@@ -89,5 +115,5 @@ jobs:
           git push origin "HEAD:$PR_HEAD_REF"
 
       - name: Remove the staged age key
-        if: ${{ always() }}
+        if: ${{ always() && steps.changes.outputs.run == 'true' }}
         run: shred -u /tmp/runner.agekey
