@@ -139,6 +139,7 @@ ______________________________________________________________________
 - Root Application manages all child Applications by directory structure under `kubernetes/apps/` and `kubernetes/infrastructure/`
 - ApplicationSet controller (`argocd-applicationset`) must be enabled in the ArgoCD Helm values
 - Adding a new service: create the directory, commit; the ApplicationSet picks it up on the next sync
+- TODO: move thin Application CRs from `kubernetes/infrastructure/private/apps/` to a public path once the internal Gitea `repoURL` can be carried as a ksops-encrypted value ([ADR-021](decisions/ADR-021-public-mirror-privacy-partitioning.md) September 2026 amendment)
 
 **Tags:** gitops, kubernetes
 
@@ -339,6 +340,7 @@ ______________________________________________________________________
 
 - SOPS config: `.sops.yaml` at repo root maps path patterns to age public keys
 - Naming convention: `values.secret.yaml` (Helm), `*.secret.tfvars` (OpenTofu), whole-file for Ansible `host_vars/`
+- Kubernetes `Secret` manifests under `kubernetes/` are whole-file SOPS ciphertext, decrypted only in the ArgoCD repo-server by the ksops plugin ([ADR-021](decisions/ADR-021-public-mirror-privacy-partitioning.md), September 2026 amendment)
 - gitleaks pre-commit hook blocks commits matching known secret formats; suppressions go in `.gitleaks.toml`
 
 **Tags:** security, secrets
@@ -726,6 +728,7 @@ ______________________________________________________________________
 - OpenTofu unit: `infrastructure/units/public/adguard/`
 - Replica web UI is a passive canary: visible drift from the primary without explanation means the sync process has failed silently
 - Never `terragrunt apply` against the replica unit
+- TODO: the adguard unit and `adguard-config` catalog are empty, so DNS rewrites are not in git despite this rule; until a real unit lands, slices that need rewrites use the manual AdGuard UI/API host step and record it in their runbook (gap found 2026-09-22)
 
 **Tags:** networking, dns, iac
 

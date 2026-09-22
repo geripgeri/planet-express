@@ -55,3 +55,32 @@ Second, this repository is a portfolio first (see [ADR-000](ADR-000-project-goal
 **Revised rule:** the `private/` partition covers internal network topology (address plans, LB pools, interface names, VPN zone policy) and all credential material. Provider identity and public domain literals are allowed in the public tree. The TLS routing manifests (ClusterIssuer, wildcard Certificate, shared Gateway, HTTPRoutes) moved to the public `kubernetes/infrastructure/networking/` directory; topology manifests stay under `kubernetes/infrastructure/private/network/`, which remains export-ignored. The gitleaks IP rules keep their allowlist for that tree.
 
 Neutral resource names adopted during the interim (`dns01-api-token`) stay: they are accurate descriptions, not obfuscation, and renaming again would churn references for no gain.
+
+______________________________________________________________________
+
+### Amendment: September 2026 — ksops adopted for Kubernetes Secret manifests
+
+The original decision rejected ksops-style decryption shims. Deploying
+Authentik (see [ADR-008](ADR-008-authentik.md)) reopened the question:
+its Kubernetes Secrets (database credentials, Authentik config keys, S3
+backup keys) and the CNPG `Cluster` backup endpoint are schema-fixed
+manifest positions, the same class of problem the original decision named.
+
+**Revised rule:** ksops is the approved mechanism for SOPS-encrypted
+Kubernetes manifests under `kubernetes/infrastructure/`. Encryption stays
+with SOPS + age as in [ADR-009](ADR-009-sops.md); ksops only performs
+decryption inside the ArgoCD repo-server pod, where the age key is a
+cluster-local Secret in the `argocd` namespace and never reaches git,
+developer workstations, or CI logs. kustomize runs the plugin through
+`generators:` with `--enable-alpha-plugins --enable-exec` (set in the
+`k8s-app` catalog). Only ciphertext is committed; the mirror workflow still
+scrubs structure it classifies as private.
+
+Thin ArgoCD `Application` CRs that must name the internal Gitea `repoURL`
+stay under `kubernetes/infrastructure/private/` until an encrypted
+`repoURL` position is proven safe; that move remains a recorded follow-up
+TODO (rulebook, GIT-02).
+
+The original preference for "plain YAML throughout" remains the default for
+everything else. New encrypted positions need a reason of the schema-fixed
+class, not convenience.
