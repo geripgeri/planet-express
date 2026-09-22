@@ -80,3 +80,5 @@ talosconfig
 **/secrets.yaml
 # Tracked SOPS-encrypted OpenTofu vars file stays addable.
 !infrastructure/secrets.yaml
+
+docs/superpowers/
