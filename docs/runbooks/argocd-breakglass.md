@@ -54,7 +54,8 @@ ArgoCD CRDs directly, which the steps below use.
 
 The install is idempotent OpenTofu: the `helm_release` reconciles the
 release `argocd` in namespace `argocd`, and the inline `kubectl_manifest`
-reapplies the root App of Apps Application `root`
+resources reapply the root App of Apps Application `root` and the
+self-management Application `argocd`
 ([ADR-002](../decisions/ADR-002-opentofu-terragrunt.md)). From the repo root:
 
 ```bash
@@ -123,6 +124,11 @@ against; check the version pinned in
 Renovate bumps the pin over time. This upgrade is break-glass only: the next
 automated sync of Application `argocd` reverts to the git-declared values,
 which removes the override again.
+
+Normal path for config-only ArgoCD changes: commit under
+`kubernetes/infrastructure/argocd/` and let Application `argocd` sync;
+check it with `kubectl -n argocd get app argocd`. Everything below is
+break-glass.
 
 ## 5. Break a self-management loop
 

@@ -164,3 +164,44 @@ resource "kubectl_manifest" "root_application" {
     kubernetes_secret_v1.gitea_repo_creds,
   ]
 }
+
+# Self-management Application: manages only the config-only directory
+# kubernetes/infrastructure/argocd/ (chart release stays in helm_release above).
+# Name must be argocd: docs/runbooks/argocd-breakglass.md addresses it as such.
+resource "kubectl_manifest" "argocd_self" {
+  yaml_body = yamlencode({
+    apiVersion = "argoproj.io/v1alpha1"
+    kind       = "Application"
+    metadata = {
+      name       = "argocd"
+      namespace  = kubernetes_namespace_v1.argocd.metadata[0].name
+      finalizers = ["resources-finalizer.argocd.argoproj.io"]
+    }
+    spec = {
+      project = "default"
+      source = {
+        repoURL        = var.gitea.url
+        targetRevision = var.target_revision
+        path           = "kubernetes/infrastructure/argocd"
+        directory = {
+          recurse = true
+        }
+      }
+      destination = {
+        server    = "https://kubernetes.default.svc"
+        namespace = kubernetes_namespace_v1.argocd.metadata[0].name
+      }
+      syncPolicy = {
+        automated = {
+          prune    = true
+          selfHeal = true
+        }
+      }
+    }
+  })
+
+  depends_on = [
+    helm_release.argocd,
+    kubernetes_secret_v1.gitea_repo_creds,
+  ]
+}
