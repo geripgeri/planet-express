@@ -1,0 +1,10 @@
+# Public chart configuration. Secrets are NOT set here: the chart's
+# existingSecret switches the config Secret entirely to ksops-managed
+# authentik-config (full AUTHENTIK_* env set), see config-secret.yaml.
+authentik:
+  enabled: true
+  existingSecret:
+    secretName: authentik-config
+
+postgresql:
+  enabled: false
