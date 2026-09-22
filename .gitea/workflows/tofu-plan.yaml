@@ -85,9 +85,16 @@ jobs:
             echo "::group::Plan $stack"
             name="$(basename "$stack")"
             cd "$GITHUB_WORKSPACE/$stack"
+            rc=0
             terragrunt stack run plan --out-dir "$GITHUB_WORKSPACE/plans/$name" --log-level info \
+              -- -detailed-exitcode \
               > "$GITHUB_WORKSPACE/plan-$name.log" 2>&1 \
-              || { fail=1; printf '%s\n' "$name" >> "$GITHUB_WORKSPACE/failed-stacks.txt"; }
+              || rc=$?
+            printf '%s\n' "$rc" > "$GITHUB_WORKSPACE/plan-exit-$name.txt"
+            if [ "$rc" -ne 0 ] && [ "$rc" -ne 2 ]; then
+              fail=1
+              printf '%s\n' "$name" >> "$GITHUB_WORKSPACE/failed-stacks.txt"
+            fi
             cat "$GITHUB_WORKSPACE/plan-$name.log"
             echo "::endgroup::"
             cd "$GITHUB_WORKSPACE"
@@ -139,29 +146,77 @@ jobs:
             log="$GITHUB_WORKSPACE/plan-$name.log"
             [ -f "$log" ] || continue
             echo "::group::Comment $name"
+            rc=1
+            if [ -f "$GITHUB_WORKSPACE/plan-exit-$name.txt" ]; then
+              rc="$(cat "$GITHUB_WORKSPACE/plan-exit-$name.txt")"
+            fi
             summary="Tofu plan: $name"
+            body_file="$GITHUB_WORKSPACE/comment-$name.md"
             if grep -qx "$name" "$GITHUB_WORKSPACE/failed-stacks.txt" 2>/dev/null; then
               summary="Tofu plan FAILED: $name"
+              rc=1
             fi
-            diff_file="$GITHUB_WORKSPACE/body-$name.txt"
-            sed -E 's/\x1b\[[0-9;]*m//g; /tofu: /{ s/^.*tofu: //; s/^[[:space:]]*([+-])/\1/; }' \
-              "$log" \
-              | grep -E '^[[:space:]]*[+~-] |^[[:space:]]*# |^Plan:|^No changes|^[[:space:]]*(Error|╷|│)' \
-              > "$diff_file"
-            if [ "$(wc -c < "$diff_file")" -gt 30000 ]; then
-              head -c 30000 "$diff_file" > "$diff_file.cap"
-              mv "$diff_file.cap" "$diff_file"
-              printf '\n-- truncated at 30000 chars; full log in Tofu plan artifact --\n' >> "$diff_file"
+            if [ "$rc" -eq 0 ]; then
+              {
+                printf '✅ Tofu plan: %s — stack is up to date.\n\n' "$name"
+                printf '%s\n' "<!-- tofu-plan:$name -->"
+              } > "$body_file"
+            else
+              if [ "$rc" -ne 1 ] && [ "$rc" -ne 2 ]; then
+                summary="Tofu plan FAILED: $name (exit $rc)"
+              fi
+              diff_file="$GITHUB_WORKSPACE/body-$name.txt"
+              sed -E \
+                -e 's/\x1b\[[0-9;]*m//g' \
+                -e 's/^.*tofu: //' \
+                "$log" \
+                | awk '
+                  /^╷$/ { buf = $0; inbuf = 1; next }
+                  inbuf {
+                    if ($0 == "╵") {
+                      buf = buf "\n" $0
+                      if (buf !~ /Additional provider information/) print buf
+                      inbuf = 0; buf = ""
+                      next
+                    }
+                    if ($0 ~ /^[│]/ || $0 == "") {
+                      buf = buf "\n" $0
+                      next
+                    }
+                    if (buf !~ /Additional provider information/) print buf
+                    inbuf = 0; buf = ""
+                  }
+                  { print }
+                  END {
+                    if (inbuf && buf !~ /Additional provider information/) print buf
+                  }
+                ' \
+                | sed -E \
+                  -e '/^[[:space:]]*- Reusing previous version/d' \
+                  -e '/^[[:space:]]*- Installing /d' \
+                  -e '/^[[:space:]]*- Installed /d' \
+                  -e '/^[[:space:]]*- Using .* from the shared cache/d' \
+                  -e '/^[[:space:]]*- Detected previously-installed/d' \
+                  -e '/^[[:space:]]*- Waiting for lock on cache directory/d' \
+                  -e '/^[[:space:]]*- terraform\.io\/builtin/d' \
+                  -e 's/^[[:space:]]*([+-])/\1/' \
+                | grep -E '^[+-] |^[[:space:]]*~ |^[[:space:]]*# |^Plan:|^No changes|^(Error|╷|│|╵)' \
+                > "$diff_file" || true
+              if [ "$(wc -c < "$diff_file")" -gt 30000 ]; then
+                head -c 30000 "$diff_file" > "$diff_file.cap"
+                mv "$diff_file.cap" "$diff_file"
+                printf '\n-- truncated at 30000 chars; full log in Tofu plan artifact --\n' >> "$diff_file"
+              fi
+              {
+                printf '<details>\n<summary><b>%s</b></summary>\n\n' "$summary"
+                printf '```diff\n'
+                cat "$diff_file"
+                printf '\n```\n\n'
+                printf '%s\n' "<!-- tofu-plan:$name -->"
+                printf '%s\n' '</details>'
+              } > "$body_file"
+              rm -f "$diff_file"
             fi
-            body_file="$GITHUB_WORKSPACE/comment-$name.md"
-            {
-              printf '<details>\n<summary><b>%s</b></summary>\n\n' "$summary"
-              printf '```diff\n'
-              cat "$diff_file"
-              printf '\n```\n\n'
-              printf '%s\n' "<!-- tofu-plan:$name -->"
-              printf '%s\n' '</details>'
-            } > "$body_file"
             comments_url="$SERVER_URL/api/v1/repos/$REPO/issues/$PR_NUM/comments"
             existing_id=$(curl -fsSL -H "Authorization: token $GITEA_TOKEN" "$comments_url" | \
               jq -r --arg m "tofu-plan:$name" '.[] | select(.body | contains($m)) | .id' | head -1)
@@ -175,7 +230,7 @@ jobs:
                 -H "Content-Type: application/json" -d "$payload" \
                 "$comments_url" >/dev/null || fail=1
             fi
-            rm -f "$diff_file" "$body_file"
+            rm -f "$body_file"
             echo "::endgroup::"
           done < "$GITHUB_WORKSPACE/stacks.txt"
           exit $fail
