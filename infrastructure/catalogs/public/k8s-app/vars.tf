@@ -26,3 +26,14 @@ variable "target_revision" {
   default     = "main"
   description = "Git revision of the monorepo the root Application tracks"
 }
+
+variable "authentik_oidc" {
+  description = "Authentik OIDC client for ArgoCD login; null before bootstrap"
+  type = object({
+    client_id     = string
+    client_secret = string
+    issuer        = string
+  })
+  default  = null
+  nullable = true
+}

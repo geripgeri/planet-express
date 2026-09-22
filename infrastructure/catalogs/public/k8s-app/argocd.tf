@@ -30,6 +30,25 @@ resource "helm_release" "argocd" {
           # inside the cluster.
           "server.insecure" = true
         }
+        cm = {
+          # ksops KRM exec plugin for encrypted kubernetes/ manifests
+          # (ADR-021 September 2026 amendment).
+          "kustomize.buildOptions" = "--enable-alpha-plugins --enable-exec"
+          # Null until secrets.yaml.authentik.argocd_oidc is populated; Helm
+          # drops the key and ArgoCD keeps local login only.
+          "oidc.config" = var.authentik_oidc == null ? null : jsonencode({
+            name            = "Authentik"
+            issuer          = var.authentik_oidc.issuer
+            clientID        = var.authentik_oidc.client_id
+            clientSecret    = var.authentik_oidc.client_secret
+            requestedScopes = ["openid", "profile", "email", "groups"]
+          })
+        }
+        rbac = {
+          "policy.csv"     = "g, argocd-admins, role:admin\n"
+          "policy.default" = "role:readonly"
+          "scopes"         = "[groups, email]"
+        }
       }
       applicationSet = {
         enabled = true
@@ -41,6 +60,68 @@ resource "helm_release" "argocd" {
         enabled = false
       }
       repoServer = {
+        # ksops install (viaduct-ai/kustomize-sops v4.5.1): init container
+        # copies ksops + bundled kustomize into an emptyDir; the age key
+        # Secret (kubernetes_secret_v1.sops_age) mounts read-only for
+        # in-cluster decryption only.
+        env = [
+          {
+            name  = "XDG_CONFIG_HOME"
+            value = "/.config"
+          },
+          {
+            name  = "SOPS_AGE_KEY_FILE"
+            value = "/.config/sops/age/keys.txt"
+          },
+        ]
+        initContainers = [
+          {
+            name    = "ksops-install"
+            image   = "viaductoss/ksops:v4.5.1"
+            command = ["/usr/local/bin/ksops", "install", "--with-kustomize", "/custom-tools"]
+            volumeMounts = [
+              {
+                name      = "custom-tools"
+                mountPath = "/custom-tools"
+              },
+            ]
+          },
+        ]
+        volumes = [
+          {
+            name     = "custom-tools"
+            emptyDir = {}
+          },
+          {
+            name = "sops-age"
+            secret = {
+              secretName = "sops-age"
+              items = [
+                {
+                  key  = "sops.age.privatekey"
+                  path = "keys.txt"
+                },
+              ]
+            }
+          },
+        ]
+        volumeMounts = [
+          {
+            name      = "custom-tools"
+            mountPath = "/usr/local/bin/ksops"
+            subPath   = "ksops"
+          },
+          {
+            name      = "custom-tools"
+            mountPath = "/usr/local/bin/kustomize"
+            subPath   = "kustomize"
+          },
+          {
+            name      = "sops-age"
+            mountPath = "/.config/sops/age"
+            readOnly  = true
+          },
+        ]
         livenessProbe = {
           httpGet = {
             path   = "/healthz"
