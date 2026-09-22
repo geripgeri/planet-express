@@ -49,6 +49,10 @@ inputs = {
 
   dns01_api_token = local.secret_vars.dns_provider.api_token
 
+  # Null until the host bootstrap writes secrets.yaml.authentik.argocd_oidc
+  # (docs/runbooks/authentik-deploy.md); ArgoCD then keeps local login only.
+  authentik_oidc = try(local.secret_vars.authentik.argocd_oidc, null)
+
   # Export SOPS_AGE_KEY before applying to also bootstrap the in-cluster
   # key Secret; leaving it unset skips that resource.
   sops_age_key = get_env("SOPS_AGE_KEY", "")
