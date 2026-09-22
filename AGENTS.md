@@ -57,6 +57,14 @@ an [ADR](docs/decisions/) explaining what was evaluated, what lost, and why.
   `stack generate` plus per-unit plans: dependency-graph and path bugs only
   surface in the full run
 
+### Repository layout
+
+- Empty placeholder directories carry a `.gitkeep`. Remove it once the
+  directory has other tracked content
+- Terragrunt trees use explicit `public/` and `private/` siblings.
+  Kubernetes trees are public by default; sensitive files go under the
+  nearest `private/` subtree ([ADR-021](docs/decisions/ADR-021-public-mirror-privacy-partitioning.md))
+
 ### General
 
 - Every non-obvious decision gets an ADR; reference it from code/docs
