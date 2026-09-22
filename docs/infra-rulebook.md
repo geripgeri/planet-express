@@ -124,10 +124,10 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-**Rule GIT-01: Bootstrap ArgoCD once via OpenTofu `null_resource`, then make it self-managing.** **Source:** ([ADR-003](decisions/ADR-003-argocd.md)) **Rationale:** GitOps has a chicken-and-egg bootstrap problem; the one-time imperative step must be isolated and documented. **Implementation:**
+**Rule GIT-01: Bootstrap ArgoCD once via OpenTofu `helm_release`, then make it self-managing.** **Source:** ([ADR-003](decisions/ADR-003-argocd.md)) **Rationale:** GitOps has a chicken-and-egg bootstrap problem; the install must happen before the controller can reconcile anything. **Implementation:**
 
-- Bootstrap command: `helm upgrade --install argocd` invoked by OpenTofu `null_resource` in the cluster stack
-- Immediately after bootstrap: create an ArgoCD Application pointing at `kubernetes/infrastructure/argocd/` so future changes are GitOps-managed
+- Bootstrap: OpenTofu `helm_release` installs the ArgoCD chart; chart-rendered resources stay in OpenTofu state
+- Self-management: an Application owns only `kubernetes/infrastructure/argocd/` (config-only manifests); merge to main is the approval gate, and ArgoCD reconciles after the merge
 - Break-glass runbook: `docs/runbooks/argocd-breakglass.md` — required deliverable before [Phase 1](../README.md#phases) is complete
 
 **Tags:** gitops, kubernetes, bootstrap
@@ -814,7 +814,7 @@ Any deviation from a rule in this rulebook requires:
 
 - **STR-01 vs OBS-02:** The default StorageClass is `longhorn` (3 replicas), but observability PVCs must use `longhorn-single-replica`. Any observability PVC without an explicit `storageClassName` will silently use the 3-replica default — always set `storageClassName` explicitly.
 - **POL-05 vs STR-01/SEC-05:** Longhorn and Cilium require privileged containers and broad host access to function. Their `PolicyException` resources are pre-approved; any change to those workloads must re-verify the exception still applies.
-- **GIT-01 vs K8S-02:** The ArgoCD bootstrap is the only sanctioned use of imperative `helm upgrade --install`. Any other imperative step must be reviewed against K8S-02.
+- **GIT-01 vs K8S-02:** The ArgoCD bootstrap is the only ArgoCD install outside the GitOps loop, and it runs as a declarative OpenTofu `helm_release`, not a manual Helm command. Any other imperative step must be reviewed against K8S-02.
 - **SEC-01 vs IaC-04:** SOPS-encrypted files are safe to publish. Verify `.sops.yaml` path patterns cover all new secret file locations before adding them to the public mirror.
 
 ### Conflict reporting
