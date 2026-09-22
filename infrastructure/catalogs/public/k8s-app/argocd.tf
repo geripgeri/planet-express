@@ -132,7 +132,7 @@ resource "kubectl_manifest" "root_application" {
     metadata = {
       name       = "root"
       namespace  = kubernetes_namespace_v1.argocd.metadata[0].name
-      finalizers = ["resources-finalizer.argocd.argoproj.io"]
+      finalizers = [local.argocd_finalizer]
     }
     spec = {
       project = "default"
@@ -147,7 +147,7 @@ resource "kubectl_manifest" "root_application" {
         }
       }
       destination = {
-        server    = "https://kubernetes.default.svc"
+        server    = local.cluster_server
         namespace = kubernetes_namespace_v1.argocd.metadata[0].name
       }
       syncPolicy = {
@@ -175,7 +175,7 @@ resource "kubectl_manifest" "argocd_self" {
     metadata = {
       name       = "argocd"
       namespace  = kubernetes_namespace_v1.argocd.metadata[0].name
-      finalizers = ["resources-finalizer.argocd.argoproj.io"]
+      finalizers = [local.argocd_finalizer]
     }
     spec = {
       project = "default"
@@ -188,7 +188,7 @@ resource "kubectl_manifest" "argocd_self" {
         }
       }
       destination = {
-        server    = "https://kubernetes.default.svc"
+        server    = local.cluster_server
         namespace = kubernetes_namespace_v1.argocd.metadata[0].name
       }
       syncPolicy = {

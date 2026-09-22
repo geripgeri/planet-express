@@ -27,13 +27,13 @@ output "kubeconfig" {
         certificate-authority-data: ${base64encode(data.kubernetes_secret_v1.ci_apply_token.data["ca.crt"])}
         server: ${var.api_server}
     contexts:
-    - name: ci-apply@talos-cluster-01
+    - name: ${local.ci_sa_name}@talos-cluster-01
       context:
         cluster: talos-cluster-01
-        user: ci-apply
-    current-context: ci-apply@talos-cluster-01
+        user: ${local.ci_sa_name}
+    current-context: ${local.ci_sa_name}@talos-cluster-01
     users:
-    - name: ci-apply
+    - name: ${local.ci_sa_name}
       user:
         token: ${data.kubernetes_secret_v1.ci_apply_token.data["token"]}
   EOF

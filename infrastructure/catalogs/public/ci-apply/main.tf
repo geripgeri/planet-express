@@ -21,13 +21,13 @@ terraform {
 # ci-plan creates the ci-system namespace. Apply the ci-plan unit first.
 data "kubernetes_namespace_v1" "ci_system" {
   metadata {
-    name = "ci-system"
+    name = local.ci_namespace
   }
 }
 
 resource "kubernetes_service_account_v1" "ci_apply" {
   metadata {
-    name      = "ci-apply"
+    name      = local.ci_sa_name
     namespace = data.kubernetes_namespace_v1.ci_system.metadata[0].name
   }
 }
@@ -36,7 +36,7 @@ resource "kubernetes_service_account_v1" "ci_apply" {
 # The controller populates data.token and data.ca.crt from the SA annotation.
 resource "kubernetes_secret_v1" "ci_apply_token" {
   metadata {
-    name      = "ci-apply-token"
+    name      = "${local.ci_sa_name}-token"
     namespace = data.kubernetes_namespace_v1.ci_system.metadata[0].name
     annotations = {
       "kubernetes.io/service-account.name" = kubernetes_service_account_v1.ci_apply.metadata[0].name
@@ -47,7 +47,7 @@ resource "kubernetes_secret_v1" "ci_apply_token" {
 
 resource "kubernetes_cluster_role_binding_v1" "cluster_admin" {
   metadata {
-    name = "ci-apply:cluster-admin"
+    name = "${local.ci_sa_name}:cluster-admin"
   }
   role_ref {
     api_group = "rbac.authorization.k8s.io"

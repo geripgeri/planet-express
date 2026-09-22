@@ -21,7 +21,7 @@ terraform {
 
 resource "kubernetes_namespace_v1" "ci_system" {
   metadata {
-    name = "ci-system"
+    name = local.ci_namespace
   }
 }
 

@@ -56,6 +56,10 @@ an [ADR](docs/decisions/) explaining what was evaluated, what lost, and why.
 - Verify stack changes with the full `terragrunt stack run plan`, not just
   `stack generate` plus per-unit plans: dependency-graph and path bugs only
   surface in the full run
+- `.terragrunt-cache/` (unit workdirs) and `.terragrunt-stack/` (generated
+  stack copies) are regenerable state. Never commit them. Safe to delete
+  to reset a broken run; regenerate with `terragrunt stack generate` or a
+  stack run. Delete only when the user asks or as an explicit task step
 
 ### Repository layout
 
