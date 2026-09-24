@@ -81,7 +81,18 @@ jobs:
           printf '%s\n' "$stacks" > "$GITHUB_WORKSPACE/stacks.txt"
           fail=0
           : > "$GITHUB_WORKSPACE/failed-stacks.txt"
+          authentik_provider_ready() {
+            sops --decrypt --extract '["authentik"]["url"]' \
+              infrastructure/secrets.yaml >/dev/null 2>&1 &&
+              sops --decrypt --extract '["authentik"]["api_token"]' \
+                infrastructure/secrets.yaml >/dev/null 2>&1
+          }
           while IFS= read -r stack; do
+            if [[ "$stack" == "infrastructure/stacks/private/authentik" ]] &&
+              ! authentik_provider_ready; then
+              echo "::notice::Skipping $stack until Authentik URL and API token exist"
+              continue
+            fi
             echo "::group::Plan $stack"
             name="$(basename "$stack")"
             cd "$GITHUB_WORKSPACE/$stack"
