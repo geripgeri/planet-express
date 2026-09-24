@@ -66,7 +66,7 @@ fill() {
   tmp="$(mktemp)"
   sops --decrypt "$file" | sed "${exprs[@]}" \
     | sops --encrypt --input-type yaml --output-type yaml \
-        --filename-override "$file" >"$tmp"
+        --filename-override "$file" /dev/stdin >"$tmp"
   mv "$tmp" "$file"
   UPDATED=$((UPDATED + 1))
 }
