@@ -84,3 +84,11 @@ TODO (rulebook, GIT-02).
 The original preference for "plain YAML throughout" remains the default for
 everything else. New encrypted positions need a reason of the schema-fixed
 class, not convenience.
+
+### Amendment: September 2026 — Authentik public examples
+
+Public Authentik documentation uses the reserved `auth.example.com` domain.
+The live Authentik HTTPRoute and stack source live under `private/` paths.
+Their former public paths remain `export-ignore` tombstones so the public
+mirror removes historical copies. This keeps deployment configuration
+internal without removing the sanitized runbook.

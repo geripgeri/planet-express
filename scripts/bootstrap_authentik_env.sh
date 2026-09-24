@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Fill authentik slice placeholder tokens on the host, then re-encrypt.
+# Fill authentik slice placeholder tokens on the host.
 # Sources values from SOPS-encrypted infrastructure/secrets.yaml.
 # Idempotent: already-filled files are detected and skipped, except that a
 # generated database password is reused to keep db-secret and config-secret
@@ -26,6 +26,7 @@ CLUSTER="$DIR/cluster.yaml"
 APPS=(
   kubernetes/infrastructure/private/apps/authentik.yaml
   kubernetes/infrastructure/private/apps/authentik-infra.yaml
+  kubernetes/infrastructure/private/apps/authentik-route.yaml
 )
 
 extract() {
@@ -41,6 +42,12 @@ token_present() {
   local out
   out="$(sops --decrypt "$1")"
   [[ "$out" == *"$2"* ]]
+}
+
+plain_token_present() {
+  local file="$1"
+  local token="$2"
+  [[ "$(<"$file")" == *"$token"* ]]
 }
 
 # fill FILE TOKEN VALUE [TOKEN VALUE ...]
@@ -60,6 +67,17 @@ fill() {
   sops --decrypt "$file" | sed "${exprs[@]}" \
     | sops --encrypt --input-type yaml --output-type yaml \
         --filename-override "$file" >"$tmp"
+  mv "$tmp" "$file"
+  UPDATED=$((UPDATED + 1))
+}
+
+fill_plain() {
+  local file="$1"
+  local token="$2"
+  local value="$3"
+  local tmp
+  tmp="$(mktemp)"
+  sed -e "s|$(esc "$token")|$(esc "$value")|g" "$file" >"$tmp"
   mv "$tmp" "$file"
   UPDATED=$((UPDATED + 1))
 }
@@ -118,9 +136,9 @@ if token_present "$BUP" "__GARAGE_ACCESS_KEY_ID__" ||
 fi
 
 for app in "${APPS[@]}"; do
-  if token_present "$app" "__GITEA_REPO_URL__"; then
-    fill "$app" "__GITEA_REPO_URL__" "$GITEA_URL"
+  if plain_token_present "$app" "__GITEA_REPO_URL__"; then
+    fill_plain "$app" "__GITEA_REPO_URL__" "$GITEA_URL"
   fi
 done
 
-echo "bootstrap fill complete: $UPDATED file(s) re-encrypted, no values printed"
+echo "bootstrap fill complete: $UPDATED file(s) updated, no values printed"

@@ -38,9 +38,14 @@ kubectl -n argocd logs deploy/argocd-application-controller --tail=100
 ## 2. Get API and UI access
 
 The server runs with `server.insecure=true`: plain HTTP inside the cluster,
-TLS termination happens outside (port-forward today, Gateway later,
-[ADR-003](../decisions/ADR-003-argocd.md)). Access goes through port-forward
-only until Authentik OIDC is live:
+TLS termination happens outside (port-forward, or the shared Gateway once
+Authentik OIDC is live, [ADR-003](../decisions/ADR-003-argocd.md)).
+
+With slice 1 deployed, the normal login is OIDC via Authentik at
+`https://argocd.example.com`; the local `admin` account is break-glass only
+(rotation steps are in step 4 and in
+[authentik-deploy](authentik-deploy.md)). For any local access, port-forward
+still works:
 
 ```bash
 kubectl -n argocd port-forward svc/argocd-server 8080:80
@@ -76,7 +81,10 @@ Notes:
 
 ## 4. Reset the admin password
 
-Two paths. Prefer the first.
+Two paths. Prefer the first. After slice 1, run this only for break-glass
+recovery or the one-time rotation in
+[authentik-deploy](authentik-deploy.md) step 8 — day-to-day login goes
+through Authentik OIDC.
 
 ### Option A: regenerate the initial secret
 

@@ -79,6 +79,9 @@ an [ADR](docs/decisions/) explaining what was evaluated, what lost, and why.
 - Always use RFC 5737 documentation addresses (TEST-NET-1: `192.0.2.0/24`,
   TEST-NET-2: `198.51.100.0/24`, TEST-NET-3: `203.0.113.0/24`) for example IPs
   in docs, code comments, and commit messages
+- Never expose real personal URLs or hostnames in public repository paths. Use
+  RFC 2606 example domains, such as `auth.example.com`, in public files. Keep
+  live URLs under `private/` paths or in SOPS-encrypted values
 
 ## Development Workflow
 
