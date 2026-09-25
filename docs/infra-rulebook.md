@@ -223,12 +223,12 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-**Rule NET-04: Put every `HTTPRoute` in `kube-system` next to `shared-gateway`; cross-namespace backends need a narrow `ReferenceGrant`.** **Source:** ([ADR-005](decisions/ADR-005-cilium-gateway-api.md)) **Rationale:** Cilium does not reconcile an `HTTPRoute` in a different namespace from its parent `Gateway` (cilium/cilium#39057, closed as not planned). The route stays statusless and traffic 404s. **Implementation:**
+**Rule NET-04: Keep the pinned Gateway API CRD bundle at or above the version the deployed Cilium chart requires.** **Source:** ([ADR-005](decisions/ADR-005-cilium-gateway-api.md)) **Rationale:** The operator skips its whole Gateway API control plane when a required CRD or CRD version is missing. Every hostname on the shared Gateway then resets, while existing routes keep their last written status and the Gateway keeps a stale `Programmed` condition, so a cluster-wide outage reads as a per-route fault. Cilium 1.20.2 needs Gateway API v1.5.0 or newer (`tlsroutes` and `referencegrants` at `v1`, plus `backendtlspolicies`). **Implementation:**
 
-- `HTTPRoute` lives in `kube-system` with `parentRefs[].namespace: kube-system`
-- `backendRefs[].namespace` names the workload namespace explicitly
-- One `ReferenceGrant` per workload namespace, limited to the exact `HTTPRoute` namespace and `Service` name
-- Verify: `kubectl -n kube-system get httproute <name>` shows `Accepted` and an address
+- Bundle pinned in `kubernetes/infrastructure/private/network/gateway-api-crds.yaml`, applied by ArgoCD; the Cilium chart does not install it
+- Before a chart upgrade, read the operator's requirement: `kubectl -n kube-system logs deploy/cilium-operator --tail=200 | grep -i "Required GatewayAPI"`
+- After the upgrade, the same command must return nothing, and `kubectl get httproute -A -o wide` must show parent and address columns
+- Treat a route with an empty status as this failure first, not as a route or DNS problem
 
 **Tags:** networking, kubernetes
 

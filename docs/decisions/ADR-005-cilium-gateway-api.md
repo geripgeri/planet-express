@@ -33,31 +33,25 @@ All services attach to a single shared `Gateway` in `kube-system`, terminating T
 
 Non-OIDC services use Authentik forward authentication via the `ExtensionRef` filter on `HTTPRoute`. Services with native OIDC support (Grafana, ArgoCD, Proxmox) configure their own Authentik integration and do not use `ExtensionRef`.
 
-## Known limitation: cross-namespace HTTPRoutes
+## Gateway API CRD bundle
 
-Cilium does not reconcile an `HTTPRoute` that lives in a different namespace
-from its parent `Gateway`. The route gets no status at all: no `Accepted`
-condition, no controller events, and the Gateway listener counts the route as
-attached while traffic returns 404. This was confirmed on this cluster with
-Cilium 1.17.6 and is still present on 1.20.2. Upstream tracks the behaviour as
-[cilium/cilium#39057](https://github.com/cilium/cilium/issues/39057), closed
-as not planned with no fix assigned.
+The Gateway API CRDs are installed from the upstream `standard-install.yaml`
+bundle, pinned in `kubernetes/infrastructure/private/network/gateway-api-crds.yaml`
+and applied by ArgoCD. The Cilium chart does not install them.
 
-Gateway API itself supports that layout: a route in an application namespace
-attaches to a shared Gateway, and a `ReferenceGrant` in the backend namespace
-authorises the cross-namespace `backendRef`. Cilium's controller is the part
-that does not follow it.
+The pin is not free choice. The operator checks the CRDs at startup and, when a
+resource it needs is missing, logs `Required GatewayAPI resources are not found` and does not start the Gateway API control plane at all. Every hostname
+on the shared Gateway then resets, existing routes keep their last written
+status unchanged, and the Gateway keeps its stale `Programmed` condition, so the
+outage looks like a per-route problem while it is cluster-wide.
 
-Because of this, every `HTTPRoute` lives in `kube-system` next to
-`shared-gateway` and reaches its backend through an explicit
-`backendRefs[].namespace`, guarded by a narrow `ReferenceGrant` in the backend
-namespace. Co-location is the only layout Cilium reconciles.
+Cilium 1.20.2 requires `tlsroutes` and `referencegrants` at `v1` plus
+`backendtlspolicies`. Gateway API v1.5.0 is the first release that satisfies
+this; the v1.2.1 bundle previously pinned here did not, which is what took
+routing down during the 1.20.2 chart upgrade.
 
-**TODO:** re-check cilium/cilium#39057 on every Cilium chart upgrade and before
-the first route that needs a different layout (a per-app Gateway, or a route
-kept in the application namespace for policy reasons). When an upstream fix
-lands, drop the co-location workaround and move routes back to their
-application namespaces in the same change.
+**Rule:** read the required CRD versions out of the operator log before every
+Cilium chart upgrade, and keep the pinned bundle at or above them.
 
 ## Consequences
 
@@ -73,4 +67,4 @@ application namespaces in the same change.
 - The `ExtensionRef` integration for Authentik forward auth is still maturing. The CRD and configuration syntax has changed between Cilium minor versions. The exact configuration must be verified against the Cilium version deployed at the time; do not copy from pre-1.14 sources without checking. This is flagged as a verification step in [Phase 3.5](../../README.md#phases).
 - Cilium Gateway API is less feature-complete than nginx or Traefik for advanced routing (complex header manipulation, per-route timeout granularity). This has not been a constraint for the current service set, but should be evaluated if a future service has unusual routing requirements.
 - Gateway API behaviour changes between Cilium minor versions. Renovate-managed chart bumps should include a changelog review before automerge.
-- Every `HTTPRoute` sits in `kube-system` instead of next to its workload. `backendRefs[].namespace` plus a `ReferenceGrant` in the workload namespace is the price of that placement, and it adds one more object to review per service.
+- The Gateway API CRD bundle is a second version to track. A chart upgrade can raise its floor without any change in git, and the failure is silent at the HTTP layer: routes keep their last status instead of reporting an error.

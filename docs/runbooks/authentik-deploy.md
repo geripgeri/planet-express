@@ -125,12 +125,9 @@ Order of events:
 2. `authentik-infra` — namespace, Secrets, and CNPG `Cluster`; wait for
    `kubectl -n authentik get cluster authentik -o wide` to report Ready and
    both PVCs Bound
-3. `authentik-route` — the private HTTPRoute in `kube-system` plus the
-   `ReferenceGrant` in `authentik`; wait for
-   `kubectl -n kube-system get httproute authentik -o wide` to report Accepted
-   with an address, and
-   `kubectl -n authentik get referencegrant allow-authentik-route-to-server`
-   to exist
+3. `authentik-route` — the private HTTPRoute; wait for
+   `kubectl -n authentik get httproute authentik -o wide` to report Accepted
+   with an address
 4. `authentik` — the chart; wait for pods `authentik-server` and
    `authentik-worker` Running (first boot runs migrations, allow several
    minutes)
@@ -250,8 +247,8 @@ the first write-heavy migration activity settles).
 
 - [ ] `kubectl -n argocd get apps` shows `cnpg-operator`, `authentik-infra`,
   `authentik-route`, `authentik` all `Synced` and `Healthy`
-- [ ] `kubectl -n kube-system get httproute authentik` shows `Accepted` with an
-  address, and the `ReferenceGrant` exists in `authentik`
+- [ ] `kubectl -n authentik get httproute authentik` shows `Accepted` with an
+  address
 - [ ] `kubectl -n authentik get pods` shows server, worker, and two
   database instances `Running`
 - [ ] `https://auth.example.com` loads; initial admin login works
@@ -264,12 +261,13 @@ the first write-heavy migration activity settles).
 
 ## Failure handling
 
-| Failure                                                 | First response                                                                                                                                                       |
-| ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| ksops comparison error on `authentik-infra`             | Confirm step 3 applied; repo-server has `ksops-install`                                                                                                              |
-| CNPG `Cluster` stuck not Ready                          | `kubectl -n authentik describe cluster authentik`; check PVC Bound and Longhorn replicas from step 1                                                                 |
-| Chart pods crash on DB auth                             | Confirm bootstrap fill ran once, `db-secret` and `config-secret` passwords match (rerun script)                                                                      |
-| OIDC redirect mismatch                                  | Provider `redirect_uris` in the authentik unit vs `https://argocd.example.com/callback`; re-apply step 6                                                             |
-| Provider apply cannot reach `auth.example.com`          | HTTPRoute/DNS from steps 1 and 4 not ready; provider only runs after the stack is live                                                                               |
-| `authentik-route` has empty status and the Gateway 404s | The HTTPRoute is not in `kube-system`; Cilium does not reconcile cross-namespace routes (cilium/cilium#39057, [ADR-005](../decisions/ADR-005-cilium-gateway-api.md)) |
-| Barman upload errors in CNPG logs                       | `k8s-backup` bucket exists, `authentik-backup` key is valid, endpoint reachable from the cluster                                                                     |
+| Failure                                        | First response                                                                                                                                                                                                                                                   |
+| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ksops comparison error on `authentik-infra`    | Confirm step 3 applied; repo-server has `ksops-install`                                                                                                                                                                                                          |
+| CNPG `Cluster` stuck not Ready                 | `kubectl -n authentik describe cluster authentik`; check PVC Bound and Longhorn replicas from step 1                                                                                                                                                             |
+| Chart pods crash on DB auth                    | Confirm bootstrap fill ran once, `db-secret` and `config-secret` passwords match (rerun script)                                                                                                                                                                  |
+| OIDC redirect mismatch                         | Provider `redirect_uris` in the authentik unit vs `https://argocd.example.com/callback`; re-apply step 6                                                                                                                                                         |
+| Provider apply cannot reach `auth.example.com` | HTTPRoute/DNS from steps 1 and 4 not ready; provider only runs after the stack is live                                                                                                                                                                           |
+| Every hostname on the shared Gateway resets    | Operator skipped its Gateway API control plane: `kubectl -n kube-system logs deploy/cilium-operator --tail=200 \| grep -i "Required GatewayAPI"`. The pinned CRD bundle is older than the chart requires ([ADR-005](../decisions/ADR-005-cilium-gateway-api.md)) |
+| An `HTTPRoute` has an empty status             | Check the operator log above first: a cluster-wide CRD mismatch looks like a per-route fault, and stale route status keeps the Gateway `Programmed` condition frozen                                                                                             |
+| Barman upload errors in CNPG logs              | `k8s-backup` bucket exists, `authentik-backup` key is valid, endpoint reachable from the cluster                                                                                                                                                                 |
