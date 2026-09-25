@@ -150,7 +150,10 @@ resource "helm_release" "argocd" {
     })
   ]
 
-  depends_on = [kubernetes_namespace_v1.argocd]
+  depends_on = [
+    kubernetes_namespace_v1.argocd,
+    kubernetes_secret_v1.sops_age,
+  ]
 }
 
 # Repository connection so the root Application can clone the monorepo.
@@ -200,7 +203,7 @@ resource "kubernetes_secret_v1" "sops_age" {
     "sops.age.privatekey" = var.sops_age_key
   }
 
-  depends_on = [helm_release.argocd]
+  depends_on = [kubernetes_namespace_v1.argocd]
 }
 
 # Root App of Apps. Discovers every child Application manifest under
