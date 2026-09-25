@@ -223,6 +223,17 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
+**Rule NET-04: Put every `HTTPRoute` in `kube-system` next to `shared-gateway`; cross-namespace backends need a narrow `ReferenceGrant`.** **Source:** ([ADR-005](decisions/ADR-005-cilium-gateway-api.md)) **Rationale:** Cilium does not reconcile an `HTTPRoute` in a different namespace from its parent `Gateway` (cilium/cilium#39057, closed as not planned). The route stays statusless and traffic 404s. **Implementation:**
+
+- `HTTPRoute` lives in `kube-system` with `parentRefs[].namespace: kube-system`
+- `backendRefs[].namespace` names the workload namespace explicitly
+- One `ReferenceGrant` per workload namespace, limited to the exact `HTTPRoute` namespace and `Service` name
+- Verify: `kubectl -n kube-system get httproute <name>` shows `Accepted` and an address
+
+**Tags:** networking, kubernetes
+
+______________________________________________________________________
+
 ### [ADR-006](decisions/ADR-006-cloudnativepg.md) — CloudNativePG
 
 ______________________________________________________________________
