@@ -64,7 +64,7 @@ locals {
     # 10.244.x) and LAN-host replies die on the return path, breaking e.g.
     # ArgoCD -> gitea. The routed-via-vpn pool (raw pod IPs via the MikroTik
     # wg-vpn SNAT) is unaffected: per-pool masquerade exclusions do not exist
-    # in the Cilium 1.17.6 chart (the note in vpn-zone.yaml is stale).
+    # in the Cilium 1.20.2 chart (the note in vpn-zone.yaml is stale).
     bpf = {
       masquerade = true
     }

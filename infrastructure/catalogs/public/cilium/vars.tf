@@ -1,6 +1,6 @@
 variable "cilium_version" {
   type        = string
-  default     = "1.17.6"
+  default     = "1.20.2"
   description = "Cilium Helm chart version. Renovate tracks this via custom regex on this file."
 }
 

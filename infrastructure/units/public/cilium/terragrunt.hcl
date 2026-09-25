@@ -50,7 +50,7 @@ generate "provider" {
 inputs = {
   # Cilium chart pin — public single source, Renovate bumps via custom regex
   # on infrastructure/catalogs/public/cilium/vars.tf and this file.
-  cilium_version = "1.17.6"
+  cilium_version = "1.20.2"
 
   # API server host for Cilium k8sServiceHost. Talos cni is none, so Cilium
   # must know the controller IP directly (kubePrism 7445 is not the API).
