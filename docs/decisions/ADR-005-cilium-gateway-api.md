@@ -50,8 +50,17 @@ Cilium 1.20.2 requires `tlsroutes` and `referencegrants` at `v1` plus
 this; the v1.2.1 bundle previously pinned here did not, which is what took
 routing down during the 1.20.2 chart upgrade.
 
+The precheck runs once, at operator startup, and a failure is not re-evaluated:
+the control plane stays off until the pod is replaced, which leaves the CRD fix
+ineffective on its own. `operator.rollOutPods = true` in the Cilium unit exists
+for this. It annotates the operator Deployment with a checksum of
+`cilium-config`, so every ConfigMap change rolls the operator and re-runs the
+check. A CRD-only change still needs an operator rollout, which a Terragrunt
+apply of this unit now provides.
+
 **Rule:** read the required CRD versions out of the operator log before every
-Cilium chart upgrade, and keep the pinned bundle at or above them.
+Cilium chart upgrade, keep the pinned bundle at or above them, and apply the
+Cilium unit after changing either so the precheck runs again.
 
 ## Consequences
 

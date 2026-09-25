@@ -228,6 +228,7 @@ ______________________________________________________________________
 - Bundle pinned in `kubernetes/infrastructure/private/network/gateway-api-crds.yaml`, applied by ArgoCD; the Cilium chart does not install it
 - Before a chart upgrade, read the operator's requirement: `kubectl -n kube-system logs deploy/cilium-operator --tail=200 | grep -i "Required GatewayAPI"`
 - After the upgrade, the same command must return nothing, and `kubectl get httproute -A -o wide` must show parent and address columns
+- `operator.rollOutPods = true` keeps the operator rolling on `cilium-config` changes; the precheck runs at startup only, so a CRD fix needs an operator rollout to take effect
 - Treat a route with an empty status as this failure first, not as a route or DNS problem
 
 **Tags:** networking, kubernetes

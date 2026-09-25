@@ -98,6 +98,15 @@ locals {
 
     operator = {
       replicas = 1
+
+      # The operator runs its Gateway API CRD precheck once, at startup. If
+      # the precheck fails it never starts the Gateway API control plane, and
+      # nothing re-runs the check until the pod is replaced: routes keep their
+      # last status and every hostname on the shared Gateway resets. This flag
+      # annotates the operator Deployment with a checksum of cilium-config, so
+      # a ConfigMap change (a chart upgrade, a feature-gate flip) always rolls
+      # the operator and re-evaluates. See ADR-005.
+      rollOutPods = true
     }
 
     # Hubble disabled by default for the bootstrap; enable via var if needed.
