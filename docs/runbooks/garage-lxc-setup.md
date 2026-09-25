@@ -105,18 +105,16 @@ cd ../garage
 terragrunt stack run apply
 ```
 
-The garage stack (`infrastructure/stacks/public/garage/`) applies the single
-`tofu-state` unit: bucket `tofu-state` plus access key `tofu-state` with
-read/write on that bucket, using the `schwitzd/garage` provider and the
-admin token from step 1.
+The garage stack (`infrastructure/stacks/public/garage/`) applies two
+units: `tofu-state` creates the state bucket and its `tofu-state` key, and
+`k8s-backup` creates the application backup bucket and its
+`authentik-backup` key. Both use the `schwitzd/garage` provider and the
+admin token from step 1. The keys have separate bucket bindings.
 
-Capture the generated access key, which is sensitive and shown only by
-OpenTofu output:
-
-```bash
-cd stacks/public/garage
-terragrunt stack output
-```
+The state key remains available through the `tofu-state` unit output. The
+Authentik runbook copies the `k8s-backup` unit outputs into
+`garage.k8s_backup.*` in `infrastructure/secrets.yaml` without printing the
+secret value.
 
 ### Troubleshooting: stale or broken generated stack
 
@@ -137,9 +135,10 @@ terragrunt stack run plan --no-cas
 `--no-cas` skips the content-addressed copy; remove it once the source
 directories no longer contain escaping symlinks.
 
-Store `access_key_id` and `secret_access_key` in
-`infrastructure/secrets.yaml` as `garage.state_access_key` (future units
-that use the remote state backend read them from there).
+Store the state unit's `access_key_id` and `secret_access_key` in
+`infrastructure/secrets.yaml` as `garage.s3.access_key_id` and
+`garage.s3.secret_access_key`. The application backup key uses the separate
+`garage.k8s_backup.*` paths documented in the Authentik runbook.
 
 ### Migrating state from the former buckets/keys units
 

@@ -11,3 +11,8 @@ unit "tofu_state" {
   source = "${local.repo_root}/infrastructure/units/public/garage/tofu-state"
   path   = "tofu-state"
 }
+
+unit "k8s_backup" {
+  source = "${local.repo_root}/infrastructure/units/public/garage/k8s-backup"
+  path   = "k8s-backup"
+}

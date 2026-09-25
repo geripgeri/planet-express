@@ -12,7 +12,7 @@ your private deployment hostname only in private paths or SOPS-encrypted values.
 ## Prerequisites
 
 - Host with the cluster admin kubeconfig (context `admin@talos-cluster-01`)
-- `sops`, `terragrunt`, `kubectl`, `openssl` installed; the sops age key at
+- `sops`, `terragrunt`, `kubectl`, `openssl`, and `python3` installed; the sops age key at
   the default location (`~/.config/sops/age/keys.txt`)
 - Branch `feat/authentik-slice1` checked out on the host before merge — the
   bootstrap script fills values before the merge-triggered apply
@@ -35,18 +35,33 @@ your private deployment hostname only in private paths or SOPS-encrypted values.
    let sync converge, or lower the replica count and record the deviation
    in the ADR follow-up. A 3-replica PVC cannot schedule otherwise.
 
-2. Backup bucket (DB-02): create it once, using the CLI access steps from
-   [garage-lxc-setup](garage-lxc-setup.md):
+2. Backup bucket and key (DB-02): apply the dedicated Garage unit after the
+   Garage LXC is ready. The `tofu-state` key is not reused for application
+   backups.
 
    ```bash
-   garage bucket create k8s-backup
+   cd infrastructure/stacks/public/garage
+   terragrunt stack run plan
+   terragrunt stack run apply
+   cd ../../../..
+   K8S_AK="$(cd infrastructure/units/public/garage/k8s-backup && terragrunt output -raw access_key_id)"
+   K8S_SK="$(cd infrastructure/units/public/garage/k8s-backup && terragrunt output -raw secret_access_key)"
+   printf '%s' "$K8S_AK" \
+     | python3 -c 'import json, sys; sys.stdout.write(json.dumps(sys.stdin.read()))' \
+     | sops set --value-stdin infrastructure/secrets.yaml \
+         '["garage"]["k8s_backup"]["access_key_id"]'
+   printf '%s' "$K8S_SK" \
+     | python3 -c 'import json, sys; sys.stdout.write(json.dumps(sys.stdin.read()))' \
+     | sops set --value-stdin infrastructure/secrets.yaml \
+         '["garage"]["k8s_backup"]["secret_access_key"]'
+   unset K8S_AK K8S_SK
    ```
 
-   The bootstrap script reuses the `garage.s3` state credentials. If those
-   keys lack bucket access, create a dedicated key with
-   `garage key create` + `garage bucket allow` and point the
-   `garage.s3` extract paths in `scripts/bootstrap_authentik_env.sh` at the
-   new values.
+   The unit creates and binds the `k8s-backup` bucket to the
+   `authentik-backup` key. The SOPS values are required before running the
+   bootstrap script. If an earlier manual bootstrap already created the
+   bucket, stop and import it into this unit before applying; do not create a
+   second bucket.
 
 3. DNS rewrites (gap: not in git yet, see rulebook DNS-02 TODO): add two
    rewrites in the AdGuard UI/API on the primary — `auth.example.com` and
@@ -59,16 +74,17 @@ On the host clone of the feature branch:
 ```bash
 scripts/bootstrap_authentik_env.sh
 git diff --stat
-git add kubernetes/
+git add infrastructure/secrets.yaml kubernetes/
 git commit -m "chore(authentik): fill bootstrap values"
 git push
 ```
 
 The script prints no values. It reads `network_config.garage_lxc.ip`,
-`garage.s3.*`, and `gitea.url` from `infrastructure/secrets.yaml`,
+`garage.k8s_backup.*`, and `gitea.url` from `infrastructure/secrets.yaml`,
 generates the database password and secret key, re-encrypts in place, and
-is safe to rerun (already-filled files are skipped; the database password
-stays in sync between `db-secret` and `config-secret`).
+refreshes the encrypted `authentik-backup` Secret from the dedicated Garage
+key on every run. The database password stays in sync between `db-secret` and
+`config-secret`.
 
 Sandbox flow note: `leela export` → host `leela fetch` → run the fill commit
 on the host feature branch → `fry push` / `fry merge all`.
@@ -76,8 +92,10 @@ on the host feature branch → `fry push` / `fry merge all`.
 ## 3. Apply the ksops tooling to ArgoCD
 
 ```bash
-cd infrastructure/units/public/argocd
-terragrunt apply
+(
+  cd infrastructure/units/public/argocd
+  terragrunt apply
+)
 ```
 
 Then verify:
@@ -130,8 +148,12 @@ kubectl -n authentik port-forward svc/authentik-server 9000:80
    (User → Tokens), then store it without echoing it:
 
    ```bash
-   read -rs T; sops set infrastructure/secrets.yaml \
-     '["authentik"]["api_token"]' "\"$T\""; unset T
+   read -rs T
+   printf '%s' "$T" \
+     | python3 -c 'import json, sys; sys.stdout.write(json.dumps(sys.stdin.read()))' \
+     | sops set --value-stdin infrastructure/secrets.yaml \
+         '["authentik"]["api_token"]'
+   unset T
    ```
 
 3. Set the provider base URL once (the value lives in sops, not in git; the
@@ -145,9 +167,11 @@ kubectl -n authentik port-forward svc/authentik-server 9000:80
 ## 6. Create the OIDC provider (AUTH-02)
 
 ```bash
-cd infrastructure/stacks/private/authentik
-terragrunt stack run plan   # review, then:
-terragrunt stack run apply
+(
+  cd infrastructure/stacks/private/authentik
+  terragrunt stack run plan   # review, then:
+  terragrunt stack run apply
+)
 ```
 
 The `goauthentik` provider creates OAuth2 provider `argocd`, application
@@ -160,11 +184,20 @@ lives in the provider docs, not in this repo).
 ```bash
 CID=$(cd infrastructure/units/public/authentik && terragrunt output -raw client_id)
 CSEC=$(cd infrastructure/units/public/authentik && terragrunt output -raw client_secret)
-sops set infrastructure/secrets.yaml '["authentik"]["argocd_oidc"]["client_id"]' "\"$CID\""
-sops set infrastructure/secrets.yaml '["authentik"]["argocd_oidc"]["client_secret"]' "\"$CSEC\""
+printf '%s' "$CID" \
+  | python3 -c 'import json, sys; sys.stdout.write(json.dumps(sys.stdin.read()))' \
+  | sops set --value-stdin infrastructure/secrets.yaml \
+      '["authentik"]["argocd_oidc"]["client_id"]'
+printf '%s' "$CSEC" \
+  | python3 -c 'import json, sys; sys.stdout.write(json.dumps(sys.stdin.read()))' \
+  | sops set --value-stdin infrastructure/secrets.yaml \
+      '["authentik"]["argocd_oidc"]["client_secret"]'
 sops set infrastructure/secrets.yaml '["authentik"]["argocd_oidc"]["issuer"]' \
   '"https://auth.example.com/application/o/argocd/"'
-cd infrastructure/units/public/argocd && terragrunt apply
+(
+  cd infrastructure/units/public/argocd
+  terragrunt apply
+)
 unset CID CSEC
 ```
 
@@ -232,4 +265,4 @@ the first write-heavy migration activity settles).
 | Chart pods crash on DB auth                    | Confirm bootstrap fill ran once, `db-secret` and `config-secret` passwords match (rerun script)          |
 | OIDC redirect mismatch                         | Provider `redirect_uris` in the authentik unit vs `https://argocd.example.com/callback`; re-apply step 6 |
 | Provider apply cannot reach `auth.example.com` | HTTPRoute/DNS from steps 1 and 4 not ready; provider only runs after the stack is live                   |
-| Barman upload errors in CNPG logs              | Bucket exists, `authentik-backup` keys valid, endpoint reachable from the cluster                        |
+| Barman upload errors in CNPG logs              | `k8s-backup` bucket exists, `authentik-backup` key is valid, endpoint reachable from the cluster         |

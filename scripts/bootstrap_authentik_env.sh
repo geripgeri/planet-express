@@ -16,6 +16,7 @@ die() {
 command -v sops >/dev/null 2>&1 || die "sops not found"
 command -v openssl >/dev/null 2>&1 || die "openssl not found"
 command -v sed >/dev/null 2>&1 || die "sed not found"
+command -v python3 >/dev/null 2>&1 || die "python3 not found"
 
 SECRETS=infrastructure/secrets.yaml
 DIR=kubernetes/infrastructure/authentik
@@ -82,14 +83,24 @@ fill_plain() {
   UPDATED=$((UPDATED + 1))
 }
 
+set_sops_string() {
+  local file="$1"
+  local index="$2"
+  local value="$3"
+  printf '%s' "$value" \
+    | python3 -c 'import json, sys; sys.stdout.write(json.dumps(sys.stdin.read()))' \
+    | sops set --value-stdin "$file" "$index"
+  UPDATED=$((UPDATED + 1))
+}
+
 GARAGE_HOST="$(extract '["network_config"]["garage_lxc"]["ip"]' || true)"
-GARAGE_AK="$(extract '["garage"]["s3"]["access_key_id"]' || true)"
-GARAGE_SK="$(extract '["garage"]["s3"]["secret_access_key"]' || true)"
+BACKUP_AK="$(extract '["garage"]["k8s_backup"]["access_key_id"]' || true)"
+BACKUP_SK="$(extract '["garage"]["k8s_backup"]["secret_access_key"]' || true)"
 GITEA_URL="$(extract '["gitea"]["url"]' || true)"
 
 [ -n "$GARAGE_HOST" ] || die "empty or missing network_config.garage_lxc.ip"
-[ -n "$GARAGE_AK" ] || die "empty or missing garage.s3.access_key_id"
-[ -n "$GARAGE_SK" ] || die "empty or missing garage.s3.secret_access_key"
+[ -n "$BACKUP_AK" ] || die "empty or missing garage.k8s_backup.access_key_id"
+[ -n "$BACKUP_SK" ] || die "empty or missing garage.k8s_backup.secret_access_key"
 [ -n "$GITEA_URL" ] || die "empty or missing gitea.url"
 
 # Keep db-secret and config-secret on the same password across runs.
@@ -123,17 +134,9 @@ if token_present "$CLUSTER" "__GARAGE_LXC_HOST__"; then
   fill "$CLUSTER" "__GARAGE_LXC_HOST__" "$GARAGE_HOST"
 fi
 
-if token_present "$BUP" "__GARAGE_ACCESS_KEY_ID__" ||
-  token_present "$BUP" "__GARAGE_ACCESS_SECRET_KEY__"; then
-  EXPRS=()
-  if token_present "$BUP" "__GARAGE_ACCESS_KEY_ID__"; then
-    EXPRS+=("__GARAGE_ACCESS_KEY_ID__" "$GARAGE_AK")
-  fi
-  if token_present "$BUP" "__GARAGE_ACCESS_SECRET_KEY__"; then
-    EXPRS+=("__GARAGE_ACCESS_SECRET_KEY__" "$GARAGE_SK")
-  fi
-  fill "$BUP" "${EXPRS[@]}"
-fi
+set_sops_string "$BUP" '["stringData"]["ACCESS_KEY_ID"]' "$BACKUP_AK"
+set_sops_string "$BUP" '["stringData"]["ACCESS_SECRET_KEY"]' "$BACKUP_SK"
+unset BACKUP_AK BACKUP_SK
 
 for app in "${APPS[@]}"; do
   if plain_token_present "$app" "__GITEA_REPO_URL__"; then
