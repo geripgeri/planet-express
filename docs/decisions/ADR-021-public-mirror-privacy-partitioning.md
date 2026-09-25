@@ -89,6 +89,6 @@ class, not convenience.
 
 Public Authentik documentation uses the reserved `auth.example.com` domain.
 The live Authentik HTTPRoute and stack source live under `private/` paths.
-Their former public paths remain `export-ignore` tombstones so the public
-mirror removes historical copies. This keeps deployment configuration
+The former public paths were not present in the public main lineage, so no
+`export-ignore` tombstones are required. This keeps deployment configuration
 internal without removing the sanitized runbook.

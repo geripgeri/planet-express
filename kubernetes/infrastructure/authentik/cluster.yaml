@@ -29,7 +29,8 @@ spec:
                 secretAccessKey:
                     name: authentik-backup
                     key: ACCESS_SECRET_KEY
-            wal: full
+            wal:
+                compression: bzip2
             data:
                 compression: bzip2
         retentionPolicy: 30d
@@ -156,6 +157,6 @@ sops:
             -----END AGE ENCRYPTED FILE-----
           recipient: age1pq1fvw2zs3m8fucwpkkmwzc5fanjqk926xvzfmsvtrgvry0vz7szlzf98sugh6257m82y6tdjtr0t6kgda8802ftyu86g27rk47k4ajhv6tjalg9pse6am9pj7wlg7g6k53hwu5vm33gxgvaq7qz0gt0k64w4jpnvgcezek9ensguwr47xezh5zw3vpvcq3as7fjfx2d4tyhuc75qua3xw7h9sxf3j5rvlp9l5w5f79as975xwwfpwxckmhgnzzrvnupgy34kxra8gz9lpphc243x59u8rjep9fwewg5eu59uh6ymaz64lflvyjgrcc2u2zwqzx43smf2cvp0zx86wgcjqnpw4wtqcf525edp7t6v6savwywsj7hwvccy2mxyt8makfd3644jv20vdg5cuya3r05h5myhv2npxlxxsa8x4mj2jl5tdernzst7pfg8xxc3ra5qvje7j84t7r2cz949tenq3jpwuww7uudvzqxv654q2vpvzg7nqx435c0dx69sywc99ldqlukf3dsh4n9v6tkt9tqcrcrz53ckpmdqy37ljcdruky9wlzprahz3hc36ffvk24huetf7ucygn84dw80a5vvdtt007sq8nfq5xcwgpdejr9wmn4sx95uh6fy26vqvsxj4q09hqhd523fnm8yd8n7ve35peuqj5denhddtat9xddx3yzunnmcugct23qx35s3llrrqcf2zyyl8zw79pcl60fdxyhvda7tysymrzycqyx7w3lxj8z2f8uht90mezfd9p4zfh4p695f720z2q0mahh8w6zx4asfhag3r0e6j5fh4pq8t4vvsxdxjer2ynd9rp7lqkf7h50qs5cpvsj9x2659cc03mzd3yxu88fwhwm546jnfq72jskrldqdfslxfa4t9y0utrmk430sa0fxef7yr47e5q7p4re3cxqsl7pfnml3cxg9574mc68phj2gfn4r4w8z0uqdkfeq9n94axdk5fgpsjy7nzqs443r2hxfl80mcns9t75tpyxnydpe7qe38pr0yuwpvmwknlj55mjtu59vvnjjazsngy0vp9ze7wt4e9pcwf88uhgjzt3fuzwvgkr6t3g3924nt22yt66q7ysp9q9k9fnaevnqf7pfu9jccjkmqd2kk27e3u2j93efh3x9jhkkzazx3jqsyyfxg8ga4k0dvyyw2q7ym3jm8pruwpswn3wpyeadszmqms86sgwc25jf30w9mmr8qv855zrrezcqzdqypm62xc3cmmjsqjkrsz5t2jef2lw9yx6ppyvjxvpdfzexgdk6gnj8z73ty976j5ualgwt7w8vktvc87mmypdtup6r54d2q98xga5p9v2zmucrr3s9259fy92pmn7qvv0afcx9sys2vye8zhdzkvxaq56zncp63rkm3kglsv2n5h8f3pg7g3prpg6k36j4knq0ygxz7ngj3wlvd3ygnyqg2tnn6fmzvs4628fedq3fscqn98dqq89p9ksxsp2lcfdmg6nl6q2apvagket9tfprzqh5cnv596xnjez9a2zyevw6n9shdsj8rqypstxwznreexxp93rgljtmjagyncp9c6x4ul8dcuvryqgqk09jg8ed0mnx59k7u26k5cck4vchdd8vryk4pl92sp8rlenaxfcfdgu9cvz5u2q4yxkq05t7x6vsdlwdwt6dvwdqygprkfzrlu3dd8q3m49s4dx97q00un8x9ztw6sfrxukcz0hdn57w3nq27kx60jd09pyyfg6jc2q84cwegkdgqkuwdk5s4t2wqtsqgcfcvjetzm2pzsex2dfz2t9frxf25f2pt4c92nl6zhwqqg248f0nxdcae92klxral0503zqqf0p686n9k7m7lq4c23pvmw34xx23rjn6dg5ghx32pw3lmq6vn9em4czxvdnm53deajt5hqx2c8
     encrypted_regex: ^(destinationPath|endpointURL)$
-    lastmodified: "2026-09-24T09:24:22Z"
-    mac: ENC[AES256_GCM,data:8Bxgm0iINy77PUvCl+mx+N1XyUwYdAdHzUKYl81mwKQvkyeq1R7IKdMgZ382EXQRTQyOEsgcWTkYxHTpijROkxmcHxFh3lXysRtSImbm3fwNj07AHDkbNLfznGo6r6almDaDFF86fw31nUYSVoFC5MfagSnlhl6Z+a51GTGwx5M=,iv:NIQ3w8+T3SCTrkhUNi5T6XGfL7iIjB+kqgV0Uc/r5Zc=,tag:x01RjZL+2qn4+6QrRb13DA==,type:str]
+    lastmodified: "2026-09-25T13:18:09Z"
+    mac: ENC[AES256_GCM,data:/unOf6qLT/DxlAojTcOCuZ9vxyY0QLuym6umARzzVoKG+FFCgQcM/FbL6KSScLpwXRjZAVOJXX2W6i3m+bJoh20EsvDTKC4J7QvwhfCSZcHAwqhi0FnFWchTY267ssKq7whjwOqMuuPC0+rXQCQb1pbkt2ZeWb6RVdS9f6TtnwI=,iv:iN18rH6XT85UYgG+4cvXx/D66HH69jLeSIYlKu1sbNU=,tag:isuqbiztGtLxGOs+G75+Kg==,type:str]
     version: 3.13.3
