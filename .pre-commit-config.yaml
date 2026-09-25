@@ -8,6 +8,9 @@ repos:
   hooks:
     # Git style
     - id: check-added-large-files
+      # Vendored upstream Gateway API CRD bundle; size is fixed by the release
+      # and tracked in ADR-005. Every other file stays under the 500 KB limit.
+      exclude: ^kubernetes/infrastructure/private/network/gateway-api-crds\.yaml$
     - id: check-executables-have-shebangs
     - id: check-merge-conflict
     - id: check-vcs-permalinks
