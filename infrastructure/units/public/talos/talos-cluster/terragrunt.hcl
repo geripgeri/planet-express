@@ -22,7 +22,7 @@ inputs = {
     # talos.dev/v1.14/introduction/support-matrix). This was bumped in a second
     # apply after the Talos upgrade (renovate caps K8s < 1.38 until Talos 1.15,
     # see renovate.json5).
-    kubernetes_version = "1.37.0"
+    kubernetes_version = "1.37.1"
     longhorn_disk_size = "100GB"
   }
 
