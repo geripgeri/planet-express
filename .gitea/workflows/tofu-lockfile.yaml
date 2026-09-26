@@ -72,7 +72,7 @@ jobs:
         run: |
           set -euo pipefail
           curl -sfL \
-            https://github.com/getsops/sops/releases/download/v3.13.3/sops-v3.13.3.linux_amd64 \
+            https://github.com/getsops/sops/releases/download/v3.13.3/sops-v3.13.3.linux.amd64 \
             -o /usr/local/bin/sops
           chmod +x /usr/local/bin/sops
 
