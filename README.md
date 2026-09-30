@@ -2,7 +2,7 @@
 
 A production-grade Kubernetes homelab on a single bare-metal host. Every non-obvious choice has an [Architecture Decision Record](#architecture-decision-records) explaining what was evaluated, what lost, and why.
 
-10+ years in Cloud Infrastructure and DevOps, primarily AWS. This is both a learning environment for Kubernetes and a portfolio artifact demonstrating infrastructure thinking. Real workloads, real failures, real documentation.
+13+ years in software and infrastructure engineering since October 2013, including 10+ years in DevOps and cloud infrastructure since March 2016, primarily AWS. This is both a learning environment for Kubernetes and a portfolio artifact demonstrating infrastructure thinking. Real workloads, real failures, real documentation.
 
 The public mirror excludes internal network topology (`infrastructure/units/private/mikrotik/`) and apps not ready for public review (`kubernetes/apps/private/`). [SOPS](https://github.com/getsops/sops)-encrypted secrets in public paths are safe, they are ciphertext. The public mirror lives on GitHub.
 
