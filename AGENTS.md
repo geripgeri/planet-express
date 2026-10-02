@@ -15,15 +15,15 @@ an [ADR](docs/decisions/) explaining what was evaluated, what lost, and why.
 
 ## Repo layout
 
-| Path              | Contents                                           |
-| ----------------- | -------------------------------------------------- |
-| `ansible/`        | Ansible roles/playbooks (bootstrap, host config)   |
-| `infrastructure/` | Talos cluster config, Terraform/Terragrunt units   |
-| `kubernetes/`     | ArgoCD apps, Helm values, k8s manifests            |
-| `docs/decisions/` | ADRs (numbered, `ADR-000-project-goals.md` starts) |
-| `docs/runbooks/`  | Operational runbooks (e.g. `talos-k8s-upgrade.md`) |
-| `scripts/`        | Python tooling (e.g. `link_adr.py`)                |
-| `tests/`          | pytest suite for scripts                           |
+| Path              | Contents                                                |
+| ----------------- | ------------------------------------------------------- |
+| `ansible/`        | Ansible roles/playbooks (bootstrap, host config)        |
+| `infrastructure/` | Talos cluster config, Terraform/Terragrunt units        |
+| `kubernetes/`     | ArgoCD apps, Helm values, k8s manifests                 |
+| `docs/decisions/` | ADRs (numbered, `ADR-000-project-goals.md` starts)      |
+| `docs/runbooks/`  | Operational runbooks (see below for the per-topic list) |
+| `scripts/`        | Python tooling (e.g. `link_adr.py`)                     |
+| `tests/`          | pytest suite for scripts                                |
 
 ## Tools and Commands
 
@@ -60,6 +60,21 @@ an [ADR](docs/decisions/) explaining what was evaluated, what lost, and why.
   stack copies) are regenerable state. Never commit them. Safe to delete
   to reset a broken run; regenerate with `terragrunt stack generate` or a
   stack run. Delete only when the user asks or as an explicit task step
+
+### Gateway API routes
+
+- Every app published over HTTP gets an `HTTPRoute` plus one ArgoCD
+  `Application`. Follow
+  [the gateway route runbook](docs/runbooks/gateway-http-route.md) — it has the
+  file layout, the backend-port lookup, the listener decision, the bootstrap
+  step, and the verification commands. Read it before writing a route
+- The gateway terminates TLS, so a route carries no `tls` stanza. Pin
+  `sectionName: https` unless there is a stated reason not to
+- The backend `Service` must be in the same namespace as the route, and its port
+  comes from the chart that actually runs, not from a guess
+- Route directories use a `kustomization.yaml`, not a `directory` source with
+  `recurse: true`. A `directory` source skips the kustomize build, which breaks
+  sops decryption for anything encrypted in that directory
 
 ### Repository layout
 
