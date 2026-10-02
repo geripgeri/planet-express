@@ -258,9 +258,9 @@ in the cluster.
 
 | App       | Route namespace   | Backend service     | Deployed by         |
 | --------- | ----------------- | ------------------- | ------------------- |
+| argocd    | `argocd`          | `argocd-server`     | Terragrunt          |
 | authentik | `authentik`       | `authentik-server`  | Terragrunt          |
 | longhorn  | `longhorn-system` | `longhorn-frontend` | ArgoCD chart source |
-| argocd    | `argocd`          | `argocd-server`     | Terragrunt          |
 
 Read the live hostnames and backends from the manifests under `private/`, not
 from this table.

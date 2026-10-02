@@ -65,9 +65,9 @@ an [ADR](docs/decisions/) explaining what was evaluated, what lost, and why.
 
 - Every app published over HTTP gets an `HTTPRoute` plus one ArgoCD
   `Application`. Follow
-  [the gateway route runbook](docs/runbooks/gateway-http-route.md) — it has the
-  file layout, the backend-port lookup, the listener decision, the bootstrap
-  step, and the verification commands. Read it before writing a route
+  [the gateway route runbook](docs/runbooks/gateway-http-route.md) for the file
+  layout, the backend-port lookup, the listener decision, the bootstrap step,
+  and the verification commands. Read it before writing a route
 - The gateway terminates TLS, so a route carries no `tls` stanza. Pin
   `sectionName: https` unless there is a stated reason not to
 - The backend `Service` must be in the same namespace as the route, and its port
