@@ -159,9 +159,9 @@ spec:
    record is dead.
 3. Validate: `uv run pre-commit run --files <the three files>`. `kubeconform`
    and `gitleaks` both gate the commit.
-4. Commit and get the branch merged.
-5. Bootstrap the `Application`, if the fleet needs it. See below.
-6. Verify on the cluster.
+4. Commit and get the branch merged. Merging to `main` is what makes the
+   `Application` appear, because `root` reads `main`.
+5. Confirm `root` adopted it, then verify on the cluster.
 
 ## Verify
 
@@ -175,27 +175,56 @@ kubectl get gateway -n kube-system shared-gateway
 load the hostname in a browser. A route that is `Accepted` but returns 503
 means the `Service` name or port is wrong, not that the route is broken.
 
-## Bootstrap the Application
+## The Application is picked up automatically
 
-An ArgoCD `Application` cannot create itself, so the first one needs an
-external apply. Determine how the existing ones get bootstrapped before
-relying on it:
+**No bootstrap step. Do not apply the `Application` by hand.**
 
-```bash
-kubectl get applicationset -n argocd -o name
-kubectl get application -n argocd authentik-route -o jsonpath='{.metadata.ownerReferences}'
-```
+An ArgoCD `Application` named `root` is the app-of-apps. Its source is the
+`private/apps/` directory itself, with `directory: {recurse: true}`, on
+`main`. Every file you drop in that directory becomes an `Application` on the
+next sync of `root`. That is how the authentik, longhorn and argocd route
+Applications all came to exist.
 
-An `ownerReferences` entry means an app-of-apps owns it and the fleet picks up
-new files in `private/apps/` on its own. No owner means each `Application` was
-applied by hand, and yours needs the same one-time apply:
+Confirm your new Application was adopted:
 
 ```bash
-kubectl apply -f kubernetes/infrastructure/private/apps/<app>-route.yaml
+kubectl get application -n argocd root \
+  -o jsonpath='{.status.resources[*].name}{"\n"}'
 ```
 
-Record which of the two applies in this runbook once you know. It is the one
-step in this procedure that is not yet written down anywhere.
+Your Application name must appear in that list. If it does not, `root` will
+prune it on its next sync, because a missing manifest is a resource that
+`root` believes it should delete. It typically does not appear if the file is
+not a valid `Application` manifest, or if the file is not committed to `main`
+yet.
+
+Do not use these two signals, both are dead ends:
+
+- **`metadata.ownerReferences`** is empty on every Application in the fleet,
+  including adopted children. ArgoCD's app-of-apps does not set owner
+  references.
+- **The `argocd.argoproj.io/instance` label** is empty on every Application in
+  the fleet, including the ones `root` demonstrably manages.
+
+`root.status.resources` is the only reliable answer.
+
+### Why `root` uses `directory: recurse` and route dirs should not
+
+This looks like it contradicts the kustomization rule above. It does not, and
+the difference is worth keeping straight:
+
+|                  | `root` source                                             | Route directory source                         |
+| ---------------- | --------------------------------------------------------- | ---------------------------------------------- |
+| Path             | `private/apps/`                                           | `private/<app>-route/`                         |
+| Holds            | flat, single-document `Application` manifests             | route manifests, possibly sops-encrypted later |
+| Kustomize needed | no, nothing to decrypt                                    | yes, for the ksops plugin                      |
+| Stray file cost  | the file is treated as an `Application` and fails to sync | the file is applied unreviewed                 |
+
+`root`'s directory holds only `Application` manifests, so `recurse: true` is
+cheap there. Two consequences still apply: anything you drop into
+`private/apps/` is interpreted as an `Application` manifest, and deleting a
+manifest from that directory makes `root` delete the corresponding Application
+in the cluster.
 
 ## Traps
 
@@ -217,6 +246,13 @@ step in this procedure that is not yet written down anywhere.
   publication verdict: the path is already covered by `export-ignore` and will
   not reach the public mirror. Verify by listing the exported bundle's tree, not
   by reading the report.
+- **An unadopted Application gets pruned.** If your `Application` does not show
+  up in `root.status.resources`, the next sync of `root` deletes it, because a
+  manifest that is absent looks like a resource that should not exist. Check the
+  adoption list before assuming the route is deploying.
+- **Anything in `private/apps/` is treated as an `Application` manifest.** That
+  directory is the `root` source. A stray file there does not get ignored, it
+  fails the sync.
 
 ## Existing routes
 
