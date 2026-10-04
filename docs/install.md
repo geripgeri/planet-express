@@ -1,6 +1,6 @@
 # Install Toolchain
 
-This document is the single source of truth for installing and verifying the toolchain needed to work on this repo. It is kept up to date whenever the tooling changes or an issue surfaces (enforced in AGENTS.md).
+This document is the single source of truth for installing and verifying the toolchain for this repo. Keep it up to date when the tooling changes or an issue surfaces (enforced in AGENTS.md).
 
 ## Tools
 
@@ -72,7 +72,7 @@ uv run --with ansible-core ansible-galaxy collection install -r ansible/requirem
 
 ## Install kubeconform and tflint
 
-Used by the `kubeconform` and `terraform_tflint` pre-commit hooks; not managed by the switchers. The release installs below put the binaries in `$HOME/bin`, which must be on `PATH` (same note as in the version switchers section below).
+The `kubeconform` and `terraform_tflint` pre-commit hooks use these. The switchers do not manage them. The release installs below put the binaries in `$HOME/bin`, which must be on `PATH` (see the version switchers section below).
 
 Linux release binaries:
 
@@ -217,7 +217,7 @@ sops --version && age --version
 uv run pre-commit --version
 ```
 
-The last line verifies the pre-commit hooks (from the uv dependency) are runnable; the hooks themselves are registered by `uv run pre-commit install` in the setup step above.
+The last line verifies the pre-commit hooks (from the uv dependency) are runnable. The hooks are registered by `uv run pre-commit install` in the setup step above.
 
 ## Verify the IaC
 
@@ -228,7 +228,7 @@ tofu fmt -check -recursive infrastructure/catalogs
 terragrunt hcl fmt --check
 ```
 
-Full validation that resolves modules and providers, but needs an age key and network access to the provider registry:
+Full validation resolves modules and providers. It needs an age key and network access to the provider registry:
 
 ```bash
 cd infrastructure && terragrunt run validate
