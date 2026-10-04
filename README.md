@@ -2,47 +2,41 @@
 
 A production-grade Kubernetes homelab on a single bare-metal host. Every non-obvious choice has an [Architecture Decision Record](#architecture-decision-records) explaining what was evaluated, what lost, and why.
 
-13+ years in software and infrastructure engineering since October 2013, including 10+ years in DevOps and cloud infrastructure since March 2016, primarily AWS. This is both a learning environment for Kubernetes and a portfolio artifact demonstrating infrastructure thinking. Real workloads, real failures, real documentation.
+13+ years in software and infrastructure engineering since October 2013, including 10+ years in DevOps and Cloud Infrastructure since March 2016, primarily AWS. I use it to learn more about Kubernetes and test how I design and operate infrastructure. Real workloads, real failures, real documentation.
 
-The public mirror excludes internal network topology (`infrastructure/units/private/mikrotik/`) and apps not ready for public review (`kubernetes/apps/private/`). [SOPS](https://github.com/getsops/sops)-encrypted secrets in public paths are safe, they are ciphertext. The public mirror lives on GitHub.
+The public mirror excludes internal network topology (`infrastructure/units/private/mikrotik/`) and unreleased apps (`kubernetes/apps/private/`). [SOPS](https://github.com/getsops/sops)-encrypted values in public paths are ciphertext. The mirror lives on GitHub.
 
 ## AI-Assisted Development
 
-This homelab is developed with AI coding agents ([opencode](https://opencode.ai), Claude) substantially involved: they propose code, configuration, ADRs, and documentation. I direct, review, and approve every change before it reaches `main`, the agents write under the constraints in [AGENTS.md](AGENTS.md), and nothing ships without my check. This is a live system running my real workloads; unvetted output would surface as outages.
+AI coding agents ([opencode](https://opencode.ai), Claude) propose code, configuration, ADRs, and documentation. Agents work under [AGENTS.md](AGENTS.md). I review every change before it reaches `main`. Nothing ships without my check. This runs my real workloads, so bad output can cause outages.
 
-I state this plainly because the repo doubles as a portfolio: honesty about the workflow is part of the skill set it demonstrates.
-
-______________________________________________________________________
+The repo is also a portfolio. I document the workflow honestly.
 
 ## Goals
 
-[ADR-000](docs/decisions/ADR-000-project-goals.md) establishes two goals that drive every decision:
+[ADR-000](docs/decisions/ADR-000-project-goals.md) sets two goals:
 
-**100% IaC, fully reproducible.** `git clone` + a blank machine + the bootstrap steps = full rebuild.
+**100% IaC.** Clone the repository, start on a blank machine, and follow the bootstrap steps.
 
-**A live system with live documentation.** Workloads are genuinely used. Documentation reflects actual state. Known gaps are documented as gaps.
-
-______________________________________________________________________
+**Live system, live docs.** Real workloads, current documentation, and explicit status.
 
 ## Hardware
 
 | Component    | Spec                                                                                                      |
 | ------------ | --------------------------------------------------------------------------------------------------------- |
 | CPU          | AMD Ryzen 5 8600G (6c/12t, 65W TDP, Radeon 760M iGPU)                                                     |
-| RAM          | 2×16GB DDR5 6000MHz (~60–80 GB/s — enables CPU LLM inference)                                             |
+| RAM          | 2×16GB DDR5 6000MHz (~60–80 GB/s, enables CPU LLM inference)                                              |
 | Boot/k8s SSD | Samsung 990 PRO 2TB NVMe PCIe 4.0                                                                         |
-| Tier 1 HDDs  | 2× WD Red Plus 4TB (btrfs RAID 1 — critical data)                                                         |
-| Tier 2 HDDs  | 4× mixed HDDs (btrfs single + mergerfs — recreatable data)                                                |
+| Tier 1 HDDs  | 2× WD Red Plus 4TB (btrfs RAID 1, critical data)                                                          |
+| Tier 2 HDDs  | 4× mixed HDDs (btrfs single + mergerfs, recreatable data)                                                 |
 | Case         | Sagittarius dual-chamber NAS (mATX, 8 HDD bays)                                                           |
 | PSU          | Corsair RM750e 750W (0 RPM mode, headroom for future GPU)                                                 |
 | Out-of-band  | [Sipeed NanoKVM Lite](https://wiki.sipeed.com/hardware/en/kvm/NanoKVM/index.html) (HDMI capture, web KVM) |
 | Hypervisor   | [Proxmox VE](https://www.proxmox.com/en/proxmox-virtual-environment/overview)                             |
 
-Current utilisation: CPU 2–10%, significant RAM headroom, running a full 4-node Talos cluster and a migration VM simultaneously.
+Current use: CPU 2–10%. The 4-node Talos cluster and a migration VM run with RAM headroom.
 
 Full rationale: [ADR-H](docs/decisions/ADR-H-hardware-platform.md)
-
-______________________________________________________________________
 
 ## Stack
 
@@ -69,11 +63,9 @@ ______________________________________________________________________
 | DNS                           | Dual [AdGuard](https://adguard.com/en/adguard-home/overview.html) LXC + [adguardhome-sync](https://github.com/bakito/adguardhome-sync)                                                                | [ADR-019](docs/decisions/ADR-019-adguard-ha-setup.md)                       |
 | Remote access                 | [Tailscale](https://tailscale.com/)                                                                                                                                                                   | [ADR-018](docs/decisions/ADR-018-tailscale.md)                              |
 
-______________________________________________________________________
-
 ## Storage Architecture
 
-Three independent tiers with different durability profiles:
+Three storage tiers:
 
 ```
 Tier 0 — Boot + Kubernetes volumes
@@ -94,123 +86,58 @@ Tier 2 — Recreatable data (media, ISOs, backups)
       └── NFS export → k8s nfs-tier2 StorageClass
 ```
 
-Why btrfs RAID 5/6, SnapRAID, and btrfs-over-mdadm were all rejected: [ADR-020](docs/decisions/ADR-020-storage-tier-strategy.md)
-
-______________________________________________________________________
+Rejected options: btrfs RAID 5/6, SnapRAID, and btrfs over mdadm. See [ADR-020](docs/decisions/ADR-020-storage-tier-strategy.md).
 
 ## Repository Structure
 
 ```
 .
-├── infrastructure/               # OpenTofu + Terragrunt
-│   ├── root.hcl                  # Shared backend config, provider versions, common inputs
-│   ├── secrets.yaml              # SOPS-encrypted secrets
-│   ├── catalogs/                 # Pure HCL modules — no live values, no secrets
-│   │   ├── public/
-│   │   │   ├── lxc/              # Proxmox LXC pattern
-│   │   │   ├── proxmox-vm/       # Proxmox VM pattern
-│   │   │   ├── talos/            # Talos cluster + node config templates
-│   │   │   ├── k8s-app/          # Generic k8s app (HTTPRoute, CNPG, ServiceMonitor)
-│   │   │   ├── adguard-config/   # AdGuard provider: rewrites, filter lists, clients
-│   │   │   └── authentik-app/    # Authentik provider: app + provider + policy
-│   │   └── private/              # export-ignore — reveals network topology
-│   │       └── mikrotik/
-│   ├── stacks/                   # Dependency-ordered unit groups
-│   │   ├── public/
-│   │   │   ├── proxmox/
-│   │   │   ├── garage/           # Strict apply order: LXC → buckets → keys
-│   │   │   └── argocd/
-│   │   └── private/
-│   │       └── mikrotik/
-│   └── units/                    # Live instantiations (one state file each)
-│       ├── public/
-│       │   ├── proxmox/          # LXCs + VMs (adguard, garage, nfs, talos nodes)
-│       │   ├── garage/           # buckets/, keys/
-│       │   ├── talos/
-│       │   ├── adguard/
-│       │   ├── argocd/
-│       │   └── authentik/
-│       └── private/
-│           └── mikrotik/
-│
-├── kubernetes/                   # ArgoCD-managed manifests
-│   ├── infrastructure/           # Platform components (deployed before apps)
-│   │   ├── argocd/
-│   │   ├── cert-manager/
-│   │   ├── cilium/
-│   │   ├── longhorn/
-│   │   ├── cnpg/
-│   │   ├── authentik/
-│   │   ├── nfs-csi/
-│   │   ├── kyverno/
-│   │   ├── velero/
-│   │   ├── trivy/
-│   │   └── renovate/
-│   └── apps/
-│       ├── observability/        # kube-prometheus-stack, Loki, Tempo, OTel, signal-cli
-│       ├── n8n/
-│       ├── ollama/
-│       └── private/              # export-ignore
-│
-├── ansible/                      # Proxmox host IaC / bootstrapping
-│   ├── playbooks/                # bootstrap.yaml (apply), verify.yaml (read-only CI checks)
-│   └── roles/
-│       ├── proxmox_base/         # Repos, packages, sysctl, SSH hardening
-│       ├── fan_control/          # Custom PWM fan curve
-│       ├── pve_exporter/         # Prometheus exporter for Proxmox metrics
-│       └── custom_scripts/
-│
-├── docs/
-│   ├── decisions/                # Architecture Decision Records
-│   ├── runbooks/                 # cluster-rebuild, proxmox-rebuild, argocd-breakglass
-│   └── diagrams/                 # Mermaid + auto-generated (inframap, KubeDiagrams)
-│
-├── scripts/
-│   └── link_adr.py               # ADR cross-reference validator
-├── tests/
-│   └── test_link_adr.py
-│
-├── pyproject.toml
-├── uv.lock
-├── .sops.yaml
-├── .gitattributes                # export-ignore rules (controls public mirror contents)
-└── renovate.json5
+├── infrastructure/            # OpenTofu + Terragrunt
+│   ├── catalogs/              # Reusable HCL modules
+│   ├── stacks/                # Dependency-ordered unit groups
+│   └── units/                 # Live instantiations, one state file each
+├── kubernetes/                # ArgoCD-managed manifests
+│   ├── infrastructure/        # Platform components, deployed before apps
+│   └── apps/                  # Application manifests
+├── ansible/                   # Proxmox host IaC: playbooks/ and roles/
+├── docs/                      # decisions/ (ADRs), runbooks/, diagrams/
+├── scripts/, tests/           # Repo tooling and its pytest suite
+└── pyproject.toml, uv.lock, .sops.yaml, renovate.json5, .gitattributes
 ```
 
-**Terragrunt pattern:** Catalogs are pure HCL modules with no live values. Units are live instantiations, one state file each. Stacks are dependency-ordered groups wiring units together.
+**Terragrunt:** Catalogs are pure HCL modules with no live values, so they are safe to publish. Units hold live state. Stacks wire units in order.
 
-**Public vs private:** All catalog modules, public units/stacks, all Kubernetes manifests, all Ansible roles, all ADRs, runbooks, and diagrams are mirrored. Mikrotik config and `kubernetes/apps/private/` are not.
-
-______________________________________________________________________
+**Public mirror:** Public modules, units, manifests, Ansible roles, ADRs, runbooks, and diagrams are published. Private network and app paths are excluded.
 
 ## Architecture Decision Records
 
-| ADR                                                                         | Decision                                  |
-| --------------------------------------------------------------------------- | ----------------------------------------- |
-| [ADR-000](docs/decisions/ADR-000-project-goals.md)                          | Project goals and philosophy              |
-| [ADR-001](docs/decisions/ADR-001-kubernetes.md)                             | Kubernetes as orchestration platform      |
-| [ADR-002](docs/decisions/ADR-002-opentofu-terragrunt.md)                    | OpenTofu + Terragrunt                     |
-| [ADR-003](docs/decisions/ADR-003-argocd.md)                                 | ArgoCD over FluxCD                        |
-| [ADR-004](docs/decisions/ADR-004-renovate.md)                               | Renovate over Dependabot                  |
-| [ADR-005](docs/decisions/ADR-005-cilium-gateway-api.md)                     | Cilium Gateway API + cert-manager         |
-| [ADR-006](docs/decisions/ADR-006-cloudnativepg.md)                          | CloudNativePG                             |
-| [ADR-007](docs/decisions/ADR-007-longhorn.md)                               | Longhorn with single-replica StorageClass |
-| [ADR-008](docs/decisions/ADR-008-authentik.md)                              | Authentik: forward auth + OIDC hybrid     |
-| [ADR-009](docs/decisions/ADR-009-sops.md)                                   | SOPS + age                                |
-| [ADR-010](docs/decisions/ADR-010-garage.md)                                 | Garage for OpenTofu remote state          |
-| [ADR-011](docs/decisions/ADR-011-observability.md)                          | Self-hosted observability stack           |
-| [ADR-012](docs/decisions/ADR-012-alerting.md)                               | Signal for alerting                       |
-| [ADR-013](docs/decisions/ADR-013-cilium-network-policy.md)                  | Cilium NetworkPolicy + Trivy Operator     |
-| [ADR-014](docs/decisions/ADR-014-kyverno.md)                                | Kyverno over OPA/Gatekeeper               |
-| [ADR-015](docs/decisions/ADR-015-disaster-recovery.md)                      | Velero backup strategy                    |
-| [ADR-016](docs/decisions/ADR-016-ansible-for-proxmox-host-configuration.md) | Ansible for Proxmox host config           |
-| [ADR-017](docs/decisions/ADR-017-infrastructure-diagramming-strategy.md)    | Infrastructure diagramming strategy       |
-| [ADR-018](docs/decisions/ADR-018-tailscale.md)                              | Tailscale over Headscale+OCI              |
-| [ADR-019](docs/decisions/ADR-019-adguard-ha-setup.md)                       | Dual AdGuard LXC + adguardhome-sync       |
-| [ADR-020](docs/decisions/ADR-020-storage-tier-strategy.md)                  | Storage tier strategy                     |
-| [ADR-H](docs/decisions/ADR-H-hardware-platform.md)                          | Hardware platform                         |
-
-______________________________________________________________________
+| ADR                                                                         | Decision                                                |
+| --------------------------------------------------------------------------- | ------------------------------------------------------- |
+| [ADR-000](docs/decisions/ADR-000-project-goals.md)                          | Project goals and philosophy                            |
+| [ADR-001](docs/decisions/ADR-001-kubernetes.md)                             | Kubernetes as orchestration platform                    |
+| [ADR-002](docs/decisions/ADR-002-opentofu-terragrunt.md)                    | OpenTofu + Terragrunt                                   |
+| [ADR-003](docs/decisions/ADR-003-argocd.md)                                 | ArgoCD over FluxCD                                      |
+| [ADR-004](docs/decisions/ADR-004-renovate.md)                               | Renovate over Dependabot                                |
+| [ADR-005](docs/decisions/ADR-005-cilium-gateway-api.md)                     | Cilium Gateway API + cert-manager                       |
+| [ADR-006](docs/decisions/ADR-006-cloudnativepg.md)                          | CloudNativePG                                           |
+| [ADR-007](docs/decisions/ADR-007-longhorn.md)                               | Longhorn with two StorageClasses (3-replica and single) |
+| [ADR-008](docs/decisions/ADR-008-authentik.md)                              | Authentik: forward auth + OIDC hybrid                   |
+| [ADR-009](docs/decisions/ADR-009-sops.md)                                   | SOPS + age                                              |
+| [ADR-010](docs/decisions/ADR-010-garage.md)                                 | Garage for OpenTofu remote state                        |
+| [ADR-011](docs/decisions/ADR-011-observability.md)                          | Self-hosted observability stack                         |
+| [ADR-012](docs/decisions/ADR-012-alerting.md)                               | Signal for alerting                                     |
+| [ADR-013](docs/decisions/ADR-013-cilium-network-policy.md)                  | Cilium NetworkPolicy + Trivy Operator                   |
+| [ADR-014](docs/decisions/ADR-014-kyverno.md)                                | Kyverno over OPA/Gatekeeper                             |
+| [ADR-015](docs/decisions/ADR-015-disaster-recovery.md)                      | Velero backup strategy                                  |
+| [ADR-016](docs/decisions/ADR-016-ansible-for-proxmox-host-configuration.md) | Ansible for Proxmox host config                         |
+| [ADR-017](docs/decisions/ADR-017-infrastructure-diagramming-strategy.md)    | Infrastructure diagramming strategy                     |
+| [ADR-018](docs/decisions/ADR-018-tailscale.md)                              | Tailscale over Headscale+OCI                            |
+| [ADR-019](docs/decisions/ADR-019-adguard-ha-setup.md)                       | Dual AdGuard LXC + adguardhome-sync                     |
+| [ADR-020](docs/decisions/ADR-020-storage-tier-strategy.md)                  | Storage tier strategy                                   |
+| [ADR-021](docs/decisions/ADR-021-public-mirror-privacy-partitioning.md)     | Public-mirror privacy partitioning                      |
+| [ADR-022](docs/decisions/ADR-022-infrastructure-testing-strategy.md)        | Infrastructure testing strategy                         |
+| [ADR-023](docs/decisions/ADR-023-coredns-upstream-kyverno.md)               | Pin coreDNS upstream with Kyverno                       |
+| [ADR-H](docs/decisions/ADR-H-hardware-platform.md)                          | Hardware platform                                       |
 
 ## Phases
 
@@ -234,22 +161,26 @@ ______________________________________________________________________
 | 12    | Application Tracing      | OTel instrumentation for n8n and Immich; Tempo populated with application traces (OTel Operator already in place from [Phase 6](#phases))                                       | [ADR-011](docs/decisions/ADR-011-observability.md)                                                                                                                                                              | **ADR-defined** |
 | 13    | Automation               | n8n + Ollama Renovate PR summarisation workflow; LLM inference validated at DDR5 6000MHz bandwidth                                                                              | [ADR-004](docs/decisions/ADR-004-renovate.md), [ADR-H](docs/decisions/ADR-H-hardware-platform.md)                                                                                                               | **ADR-defined** |
 | 14    | Kyverno Policy Expansion | Add policies beyond initial set: RBAC constraints, namespace isolation rules, registry allowlist refinements                                                                    | [ADR-014](docs/decisions/ADR-014-kyverno.md)                                                                                                                                                                    | **ADR-defined** |
-| 15    | Offsite Backup           | Offsite target for Tier 1 NFS data (Immich, Paperless-ngx); rclone/restic job; closes the sharpest known DR gap                                                                 | [ADR-015](docs/decisions/ADR-015-disaster-recovery.md), [ADR-020](docs/decisions/ADR-020-storage-tier-strategy.md), [ADR-H](docs/decisions/ADR-H-hardware-platform.md)                                          | **ADR-defined** |
-
-______________________________________________________________________
 
 ## Runbooks
 
-Planned, not yet written. Keyed to the phase deliverables in the table above:
+Existing runbooks:
 
-- `docs/runbooks/cluster-rebuild.md` — Full cluster recovery from scratch
-- `docs/runbooks/proxmox-rebuild.md` — Host-level steps Ansible cannot automate
-- `docs/runbooks/argocd-breakglass.md` — Recovering ArgoCD when it cannot self-heal
-- `docs/runbooks/tier1-migration.md` — mdadm+ext4 → btrfs RAID 1 (high risk, irreplaceable data)
-- `docs/runbooks/tier2-migration.md` — LVM+ext4 → btrfs single + mergerfs (low risk, recreatable data)
+- `docs/runbooks/argocd-breakglass.md`: Recover ArgoCD when it cannot self-heal
+- `docs/runbooks/authentik-deploy.md`: Deploy and verify Authentik
+- `docs/runbooks/garage-lxc-setup.md`: Set up the Garage LXC
+- `docs/runbooks/infra-testing.md`: Run infrastructure tests
+- `docs/runbooks/renovate-config-edit.md`: Change Renovate configuration safely
+- `docs/runbooks/talos-k8s-upgrade.md`: Run Talos and Kubernetes upgrades
+- `docs/runbooks/tofu-state-migration.md`: Migrate OpenTofu state
 
-______________________________________________________________________
+Planned runbooks:
+
+- `docs/runbooks/cluster-rebuild.md`: Full cluster recovery from scratch
+- `docs/runbooks/proxmox-rebuild.md`: Host-level steps Ansible cannot automate
+- `docs/runbooks/tier1-migration.md`: mdadm+ext4 → btrfs RAID 1 (high risk, irreplaceable data)
+- `docs/runbooks/tier2-migration.md`: LVM+ext4 → btrfs single + mergerfs (low risk, recreatable data)
 
 ## Getting Started
 
-Install the full toolchain (uv, OpenTofu + Terragrunt via tfswitch/tgswitch, sops, age) by following the [install doc](docs/install.md).
+Install uv, OpenTofu, Terragrunt, SOPS, and age. See the [install doc](docs/install.md).
