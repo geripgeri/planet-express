@@ -1,4 +1,4 @@
-# ADR-023: Pin coreDNS Upstream — an Interim Keeper CronJob, then Kyverno
+# ADR-023: Pin coreDNS Upstream with an Interim Keeper CronJob, then Kyverno
 
 ## Status
 
@@ -15,7 +15,7 @@ Two distinct faults surfaced:
 
 1. **coreDNS could not reach any upstream.** coreDNS uses `dnsPolicy: Default`,
    so kubelet fills its `resolv.conf` with the node resolver. After the
-   upgrade kubelet handed pods the address `169.254.116.108` — the Talos
+   upgrade kubelet handed pods the address `169.254.116.108`, the Talos
    hostDNS link-local socket. No daemon answers behind that address (a
    direct query from a `dnsPolicy: Default` pod timed out), so coreDNS
    returned SERVFAIL / empty answers for every name, internal
@@ -60,33 +60,34 @@ GitOps loop.
   carries the old keys (`.machine.install`, `.machine.network.nameservers`,
   `.machine.cluster.network`, `.machine.features.kubePrism`,
   `.machine.cluster.proxy`, `.machine.kubelet`) fails with "cannot be used
-  with ... document" conflicts. The full migration to v1.14 documents is a
-  separate, large rework of the talos catalog — not something to chain onto
-  an incident fix.
+  with ... document" conflicts. The full migration is a separate, large
+  rework of the talos catalog, not something to chain onto an incident fix.
 - **Kyverno mutation of the coreDNS Corefile.** coreDNS's upstream comes
   from its ConfigMap, which Talos re-renders from its addon. A Kyverno
   `ClusterPolicy` mutating the `coredns` ConfigMap (kube-system) to pin the
   `forward .` upstream on every create/update admission makes the fix
   durable: any Talos re-render during a future upgrade is re-mutated
-  immediately, and coreDNS reloads on ConfigMap change. Needs zero machine
-  config churn and self-heals. **Deferred**: Kyverno is planned ([ADR-014](ADR-014-kyverno.md))
-  but not yet installed in this cluster — no CRDs, no helm app. Installing
-  it is a separate deliverable, so the interim fix below lands first.
+  immediately, and coreDNS reloads on ConfigMap change. It needs zero
+  machine config churn and self-heals. **Deferred**: Kyverno is planned
+  ([ADR-014](ADR-014-kyverno.md)) but not yet installed in this cluster: no
+  CRDs, no helm app. Installing it is a separate deliverable, so the interim
+  fix below lands first.
 
 ## Decision
 
 While Kyverno is not yet installed, pin the upstream with an interim
-**keeper CronJob**, `kubernetes/infrastructure/private/coredns-upstream/ cronjob.yaml`, that re-applies the desired Talos-rendered `coredns`
-ConfigMap (a `kubectl apply` of a fixed Corefile with `forward . <resolver1>`, a single pinned resolver) every 5
+**keeper CronJob**, `kubernetes/infrastructure/private/coredns-upstream/cronjob.yaml`, that re-applies the
+desired Talos-rendered `coredns` ConfigMap (a `kubectl apply` of a fixed
+Corefile with `forward . <resolver1>`, a single pinned resolver) every 5
 minutes. Any Talos re-render of the ConfigMap during a future upgrade is
-replaced within 5 minutes; coreDNS reloads on ConfigMap change. The path is
-export-ignored so the real LAN resolver addresses never reach the public
-mirror; the published docs (this ADR, the incident report, the runbook)
+replaced within 5 minutes, and coreDNS reloads on ConfigMap change. The path
+is export-ignored so the real LAN resolver addresses never reach the public
+mirror, and the published docs (this ADR, the incident report, the runbook)
 demonstrate the mechanism with TEST-NET example addresses.
 
 **Once Kyverno is installed ([ADR-014](ADR-014-kyverno.md) follow-up), delete the CronJob and
 adopt the ClusterPolicy instead** (acts at admission time, target
-Convergence in seconds). The operative policy form, for reproduction:
+convergence in seconds). The operative policy form, for reproduction:
 
 ```yaml
 apiVersion: kyverno.io/v1
@@ -130,11 +131,12 @@ spec:
 The Corefile must keep the `ready` plugin: Talos's coreDNS Deployment
 readiness probe hits `:8181/ready`, which only exists when `ready` is in
 the Corefile. Replacing the Corefile without `ready` makes coreDNS run but
-never Ready, so the `kube-dns` endpoints empty and every pod loses DNS —
-worse than the original fault (a regression found during this work).
+never Ready, so the `kube-dns` endpoints empty and every pod loses DNS,
+which is worse than the original fault (a regression found during this
+work).
 
-Both mechanisms share the same private/export-ignored placement and need
-the same ArgoCD private-app source wiring: the keeper's `coredns-upstream`
+Both mechanisms share the same private/export-ignored placement and need the
+same ArgoCD private-app source wiring: the keeper's `coredns-upstream`
 directory now, the policies path when the ClusterPolicy lands.
 
 The machine config stays untouched: the talos provider remains on the
@@ -149,15 +151,15 @@ managed generation.
 **Positive**
 
 - Durable across upgrades: any Talos re-render of the ConfigMap is replaced
-  by the keeper within 5 minutes; no operator re-apply step.
-- Lands today: needs no new component, no admission controller, and no
-  machine config churn on the most critical unit of the repository (talos
-  machine config, provider pin, machine secrets).
+  by the keeper within 5 minutes, with no operator re-apply step, and the
+  manual incident patch (currently only a live, untracked ConfigMap edit) is
+  replaced by repo-tracked state, so there is no drift on the next Talos
+  re-render.
+- Lands today: no new component, no admission controller, and no machine
+  config churn on the most critical unit of the repository (talos machine
+  config, provider pin, machine secrets).
 - GitOps-managed by ArgoCD via the private apps tree; plain manifests, no
   two-step model.
-- The manual incident patch (currently only a live, untracked ConfigMap
-  edit) is replaced by repo-tracked state; no drift on the next Talos
-  re-render.
 
 **Negative**
 
@@ -176,20 +178,20 @@ managed generation.
   must be torn down once the ClusterPolicy takes over; until then the two
   mechanisms must never both be active.
 - Talos hostDNS stays enabled, so the dead-socket default resolver would
-  still apply to any other `dnsPolicy: Default` pod that is not coreDNS;
-  the pod must set its own upstream or `dnsPolicy: ClusterFirst`. coreDNS
+  still apply to any other `dnsPolicy: Default` pod that is not coreDNS.
+  The pod must set its own upstream or `dnsPolicy: ClusterFirst`. coreDNS
   is the only workload that needs a Default-policy resolver today.
 - The keeper's `kubectl apply` anchors the Talos-owned ConfigMap with the
-  `kubectl.kubernetes.io/last-applied-configuration` annotation; Talos
+  `kubectl.kubernetes.io/last-applied-configuration` annotation. Talos
   re-renders strip it, which is exactly the drift the keeper corrects.
 
 **Open items**
 
 - Install Kyverno ([ADR-014](ADR-014-kyverno.md)), then apply the ClusterPolicy above, delete the
   keeper CronJob, and wire the policies path into its private ArgoCD app.
-  The ClusterPolicy content is not committed yet — reproduce from this ADR.
+  The ClusterPolicy content is not committed yet. Reproduce it from this ADR.
 - Migrate the talos catalog to v1.14-style documents (ResolverConfig,
   UnattendedInstallConfig, KubeNetworkConfig, KubePrismConfig,
   KubeProxyConfig) in a dedicated branch. Once complete, disable hostDNS
   via the `ResolverConfig` document (`hostDNS.enabled: false`) and drop
-  the keeper/policy — the upgrades then need no post-hoc convergence.
+  the keeper/policy: the upgrades then need no post-hoc convergence.

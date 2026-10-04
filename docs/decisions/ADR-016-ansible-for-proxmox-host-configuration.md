@@ -12,14 +12,14 @@ That accumulation of undocumented manual steps is exactly the failure mode [ADR-
 
 The tool managing host configuration needs to satisfy four requirements:
 
-- **Idempotent.** Safe to re-run on a live host with VMs running. It enforces desired state without requiring awareness of intermediate states.
-- **Agentless.** Adding a persistent agent process to the hypervisor introduces an attack surface and a service dependency. The tool should connect over SSH and leave nothing behind.
-- **YAML-native.** Every other configuration layer in this project is YAML: Kubernetes manifests, Helm values, OpenTofu variables, Gitea Actions workflows. A different DSL has real cognitive cost in a solo project.
-- **Testable in CI.** Linting and syntax validation must run on Gitea Actions without a live host.
+- **Idempotent.** Safe to re-run on a live host with VMs running, enforcing desired state without awareness of intermediate states
+- **Agentless.** A persistent agent process on the hypervisor adds attack surface and a service dependency. The tool connects over SSH and leaves nothing behind
+- **YAML-native.** Every other configuration layer here is YAML: Kubernetes manifests, Helm values, OpenTofu variables, Gitea Actions workflows. A different DSL has real cognitive cost in a solo project
+- **Testable in CI.** Linting and syntax validation must run on Gitea Actions without a live host
 
-Bash scripts were considered and rejected: they have no native idempotency, no inventory model, no secrets integration, and running ad-hoc shell on a live hypervisor is dangerous in a way structured task execution is not. [Chef](https://www.chef.io) and [Puppet](https://www.puppet.com) both require a persistent agent and a management server, and neither is YAML-native. [SaltStack](https://saltproject.io) supports agentless mode via [`salt-ssh`](https://docs.saltproject.io/en/latest/topics/ssh/), but it's a second-class citizen in that ecosystem and has weaker community signal than Ansible. OpenTofu provisioners are explicitly documented as a last resort: they run only at resource creation time, produce no diff, and are not idempotent by design.
+Bash scripts were considered and rejected: no native idempotency, no inventory model, no secrets integration, and running ad-hoc shell on a live hypervisor is dangerous in a way structured task execution is not. [Chef](https://www.chef.io) and [Puppet](https://www.puppet.com) both need a persistent agent and a management server, and neither is YAML-native. [SaltStack](https://saltproject.io) supports agentless mode via [`salt-ssh`](https://docs.saltproject.io/en/latest/topics/ssh/), but that is a second-class citizen in its ecosystem with weaker community signal than Ansible. OpenTofu provisioners are documented as a last resort: they run only at resource creation time, produce no diff, and are not idempotent by design.
 
-[Ansible](https://www.ansible.com) is the natural fit: agentless over SSH, idempotent by module design, YAML-native, and has the largest community footprint of any agentless configuration management tool.
+[Ansible](https://www.ansible.com) is the natural fit: agentless over SSH, idempotent by module design, YAML-native, and the largest community footprint of any agentless configuration management tool.
 
 **What Ansible owns:**
 
@@ -33,11 +33,11 @@ Bash scripts were considered and rejected: they have no native idempotency, no i
 
 **What Ansible does not own:**
 
-- Initial Proxmox installation: would require PXE/kickstart infrastructure that costs more to build than it saves
+- Initial Proxmox installation: it would need PXE/kickstart infrastructure that costs more to build than it saves
 - Proxmox cluster join sequence: same reasoning
 - VM and LXC state: OpenTofu owns this
 
-The boundary is: Ansible owns the OS layer; OpenTofu owns the resource layer. When Ansible manages a file that OpenTofu also touches, that is a design error.
+The boundary is: Ansible owns the OS layer, OpenTofu owns the resource layer. When Ansible manages a file that OpenTofu also touches, that is a design error.
 
 ## Decision
 
@@ -48,8 +48,7 @@ The implementation lives under `ansible/` with one role per concern: `proxmox_ba
 ## Consequences
 
 - Proxmox host configuration is committed to git, linted by [`ansible-lint`](https://ansible.readthedocs.io/projects/lint/) in Gitea Actions on every PR, and reproducible from a documented starting point
-- Any change to host state goes through `ansible/` rather than directly via SSH
-- Fan control, pve-exporter, and host hardening are managed as code with the same discipline as the Kubernetes and OpenTofu layers
-- The OS/resource boundary between Ansible and OpenTofu must be respected as new host-level concerns are added; drift here creates confusion about which tool is authoritative
-- Host state that cannot be made safely idempotent is documented in `docs/runbooks/proxmox-rebuild.md` rather than forced into playbooks or silently omitted; together, the runbook and `bootstrap.yaml` answer the question of what to do if the bare metal dies tonight
-- Ansible does not reconstruct the Proxmox OS from scratch; a physical install from ISO is still required before Ansible's scope begins
+- Any change to host state goes through `ansible/` rather than directly via SSH, and fan control, pve-exporter, and host hardening are managed as code with the same discipline as the Kubernetes and OpenTofu layers
+- The OS/resource boundary between Ansible and OpenTofu must hold as new host-level concerns arrive, because drift there creates confusion about which tool is authoritative
+- Host state that cannot be made safely idempotent is documented in `docs/runbooks/proxmox-rebuild.md` rather than forced into playbooks or silently omitted. Together, the runbook and `bootstrap.yaml` answer what to do if the bare metal dies tonight
+- Ansible does not reconstruct the Proxmox OS from scratch. A physical install from ISO is still required before Ansible's scope begins
