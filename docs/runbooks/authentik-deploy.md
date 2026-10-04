@@ -4,17 +4,16 @@ Deploys k8s Authentik, the CNPG operator, the Authentik database with WAL
 archiving, `auth.example.com` exposure, and ArgoCD OIDC login
 ([ADR-008](../decisions/ADR-008-authentik.md),
 [ADR-006](../decisions/ADR-006-cloudnativepg.md),
-[ADR-021](../decisions/ADR-021-public-mirror-privacy-partitioning.md)).
-Everything runs on the host workstation: the sandbox has no cluster access
-and no sops age key. Public examples use `auth.example.com`; replace it with
-your private deployment hostname only in private paths or SOPS-encrypted values.
+[ADR-021](../decisions/ADR-021-public-mirror-privacy-partitioning.md)). Run every step on the host workstation: the sandbox has no cluster access and no sops age key.
+Public examples use `auth.example.com`; replace it with your private hostname
+only in private paths or SOPS-encrypted values.
 
 ## Prerequisites
 
 - Host with the cluster admin kubeconfig (context `admin@talos-cluster-01`)
 - `sops`, `terragrunt`, `kubectl`, `openssl`, and `python3` installed; the sops age key at
   the default location (`~/.config/sops/age/keys.txt`)
-- Branch `feat/authentik-slice1` checked out on the host before merge — the
+- Branch `feat/authentik-slice1` checked out on the host before merge; the
   bootstrap script fills values before the merge-triggered apply
 - Access steps from [garage-lxc-setup](garage-lxc-setup.md) for the Garage
   bucket CLI
@@ -58,13 +57,13 @@ your private deployment hostname only in private paths or SOPS-encrypted values.
    ```
 
    The unit creates and binds the `k8s-backup` bucket to the
-   `authentik-backup` key. The SOPS values are required before running the
-   bootstrap script. If an earlier manual bootstrap already created the
-   bucket, stop and import it into this unit before applying; do not create a
-   second bucket.
+   `authentik-backup` key. The SOPS values are required before the bootstrap
+   script runs. If an earlier manual bootstrap already created the bucket,
+   stop and import it into this unit before applying. Do not create a second
+   bucket.
 
 3. DNS rewrites (gap: not in git yet, see rulebook DNS-02 TODO): add two
-   rewrites in the AdGuard UI/API on the primary — `auth.example.com` and
+   rewrites in the AdGuard UI/API on the primary: `auth.example.com` and
    `argocd.example.com`, both to the shared-gateway node address.
 
 ## 2. Fill bootstrap values (host, before merge)
@@ -82,8 +81,8 @@ git push
 The script prints no values. It reads `network_config.garage_lxc.ip`,
 `garage.k8s_backup.*`, and `gitea.url` from `infrastructure/secrets.yaml`,
 generates the database password and secret key, re-encrypts in place, and
-refreshes the encrypted `authentik-backup` Secret from the dedicated Garage
-key on every run. The database password stays in sync between `db-secret` and
+refreshes the encrypted `authentik-backup` Secret from the dedicated Garage key
+on every run. The database password stays in sync between `db-secret` and
 `config-secret`.
 
 Sandbox flow note: `leela export` → host `leela fetch` → run the fill commit
@@ -98,8 +97,6 @@ on the host feature branch → `fry push` / `fry merge all`.
 )
 ```
 
-Then verify:
-
 ```bash
 kubectl -n argocd get deploy argocd-repo-server \
   -o jsonpath='{.spec.template.spec.initContainers[*].name}{"\n"}'
@@ -107,10 +104,9 @@ kubectl -n argocd get cm argocd-cm \
   -o jsonpath='{.data.kustomize\.buildOptions}{"\n"}'
 ```
 
-Expected: `ksops-install` and
-`--enable-alpha-plugins --enable-exec`. Until this apply runs, the
-`authentik-infra` Application shows a comparison error on the ksops
-generator — expected, it heals after the apply.
+Expected: `ksops-install` and `--enable-alpha-plugins --enable-exec`. Before
+this apply runs, the `authentik-infra` Application shows a comparison error on
+the ksops generator. It heals after the apply.
 
 ## 4. Let the child Applications deploy
 
@@ -120,15 +116,14 @@ kubectl -n argocd get apps -w
 
 Order of events:
 
-1. `cnpg-operator` — `CreateNamespace=true` creates `cnpg-system`; wait for
+1. `cnpg-operator`: `CreateNamespace=true` creates `cnpg-system`; wait for
    `kubectl get crd postgresql.cnpg.io`
-2. `authentik-infra` — namespace, Secrets, and CNPG `Cluster`; wait for
+2. `authentik-infra`: namespace, Secrets, and CNPG `Cluster`; wait for
    `kubectl -n authentik get cluster authentik -o wide` to report Ready and
    both PVCs Bound
-3. `authentik-route` — the private HTTPRoute; wait for
+3. `authentik-route`: the private HTTPRoute; wait for
    `kubectl -n authentik get httproute authentik -o wide` to report Accepted
-   with an address
-4. `authentik` — the chart; wait for pods `authentik-server` and
+4. `authentik`: the chart; wait for pods `authentik-server` and
    `authentik-worker` Running (first boot runs migrations, allow several
    minutes)
 
@@ -177,8 +172,8 @@ kubectl -n authentik port-forward svc/authentik-server 9000:80
 
 The `goauthentik` provider creates OAuth2 provider `argocd`, application
 `ArgoCD` (slug `argocd`), and group `argocd-admins`. If plan rejects an
-argument name, trust the plan error and adjust `main.tf` (the schema
-lives in the provider docs, not in this repo).
+argument name, trust the plan error and adjust `main.tf`; the schema is in the
+provider docs, not in this repo.
 
 ## 7. Wire OIDC into ArgoCD
 
@@ -213,8 +208,8 @@ Expected: `True`.
 
 ## 8. Rotate the local admin password
 
-The local `admin` account becomes break-glass only. Rotate its password
-now and store the new value in the password manager — follow
+The local `admin` account becomes break-glass only. Rotate its password now,
+store it in the password manager, then follow
 [argocd-breakglass](argocd-breakglass.md) step 4 (Option A or B).
 
 ## 9. Exposure and login tests
@@ -228,7 +223,7 @@ From a machine on the home LAN (DNS rewrites from step 1 must exist):
 3. A user outside the group reaches ArgoCD but gets read-only (RBAC
    `policy.default = role:readonly`)
 
-Membership is managed in Authentik only — never with
+Membership is managed in Authentik only. Never use
 `kubectl create rolebinding`.
 
 ## 10. Backup check
@@ -240,15 +235,13 @@ kubectl -n authentik get cluster authentik -o jsonpath='{.status.backup}{"\n"}'
 ```
 
 Expect objects under the bucket path and a configured backup in the
-cluster status after the first WAL segment is archived (may take until
-the first write-heavy migration activity settles).
+cluster status after the first WAL segment is archived. This can take until
+the first write-heavy migration activity settles.
 
 ## 11. Verification checklist
 
 - [ ] `kubectl -n argocd get apps` shows `cnpg-operator`, `authentik-infra`,
   `authentik-route`, `authentik` all `Synced` and `Healthy`
-- [ ] `kubectl -n authentik get httproute authentik` shows `Accepted` with an
-  address
 - [ ] `kubectl -n authentik get pods` shows server, worker, and two
   database instances `Running`
 - [ ] `https://auth.example.com` loads; initial admin login works
@@ -261,13 +254,11 @@ the first write-heavy migration activity settles).
 
 ## Failure handling
 
-| Failure                                        | First response                                                                                                                                                                                                                                                   |
-| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| ksops comparison error on `authentik-infra`    | Confirm step 3 applied; repo-server has `ksops-install`                                                                                                                                                                                                          |
-| CNPG `Cluster` stuck not Ready                 | `kubectl -n authentik describe cluster authentik`; check PVC Bound and Longhorn replicas from step 1                                                                                                                                                             |
-| Chart pods crash on DB auth                    | Confirm bootstrap fill ran once, `db-secret` and `config-secret` passwords match (rerun script)                                                                                                                                                                  |
-| OIDC redirect mismatch                         | Provider `redirect_uris` in the authentik unit vs `https://argocd.example.com/callback`; re-apply step 6                                                                                                                                                         |
-| Provider apply cannot reach `auth.example.com` | HTTPRoute/DNS from steps 1 and 4 not ready; provider only runs after the stack is live                                                                                                                                                                           |
-| Every hostname on the shared Gateway resets    | Operator skipped its Gateway API control plane: `kubectl -n kube-system logs deploy/cilium-operator --tail=200 \| grep -i "Required GatewayAPI"`. The pinned CRD bundle is older than the chart requires ([ADR-005](../decisions/ADR-005-cilium-gateway-api.md)) |
-| An `HTTPRoute` has an empty status             | Check the operator log above first: a cluster-wide CRD mismatch looks like a per-route fault, and stale route status keeps the Gateway `Programmed` condition frozen                                                                                             |
-| Barman upload errors in CNPG logs              | `k8s-backup` bucket exists, `authentik-backup` key is valid, endpoint reachable from the cluster                                                                                                                                                                 |
+| Failure                                        | First response                                                                                           |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| ksops comparison error on `authentik-infra`    | Confirm step 3 applied; repo-server has `ksops-install`                                                  |
+| CNPG `Cluster` stuck not Ready                 | `kubectl -n authentik describe cluster authentik`; check PVC Bound and Longhorn replicas from step 1     |
+| Chart pods crash on DB auth                    | Confirm bootstrap fill ran once, `db-secret` and `config-secret` passwords match (rerun script)          |
+| OIDC redirect mismatch                         | Provider `redirect_uris` in the authentik unit vs `https://argocd.example.com/callback`; re-apply step 6 |
+| Provider apply cannot reach `auth.example.com` | HTTPRoute/DNS from steps 1 and 4 not ready; provider only runs after the stack is live                   |
+| Barman upload errors in CNPG logs              | `k8s-backup` bucket exists, `authentik-backup` key is valid, endpoint reachable from the cluster         |

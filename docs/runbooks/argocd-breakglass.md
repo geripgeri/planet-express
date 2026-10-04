@@ -1,19 +1,19 @@
 # Runbook: ArgoCD Break-Glass Recovery
 
-Recovers ArgoCD when it cannot heal itself. Covers crash-looping components,
+Recovers ArgoCD when it cannot heal itself: crash-looping components,
 self-management loops, a lost admin password, and a broken repository
-connection ([ADR-003](../decisions/ADR-003-argocd.md)). The GitOps loop is the
-only normal write path to the cluster ([ADR-000](../decisions/ADR-000-project-goals.md));
-every step here is an exception and ends when the loop takes over again.
+connection ([ADR-003](../decisions/ADR-003-argocd.md)). Every step here is an
+exception. The GitOps loop is the only normal write path
+([ADR-000](../decisions/ADR-000-project-goals.md)).
 
 ## Prerequisites
 
 - A workstation with the cluster admin kubeconfig (context
   `admin@talos-cluster-01`, written by `talosctl`)
 - Terragrunt and `kubectl` installed
-- For the reinstall path: the sops age key for
-  `infrastructure/secrets.yaml`, plus the dedicated ArgoCD age keypair when
-  the in-cluster key Secret must be recreated ([ADR-009](../decisions/ADR-009-sops.md))
+- For the reinstall path: the sops age key for `infrastructure/secrets.yaml`,
+  plus the dedicated ArgoCD age keypair when the in-cluster key Secret must be
+  recreated ([ADR-009](../decisions/ADR-009-sops.md))
 - Never run two applies against the same unit at once; the backend lockfile
   makes the second run fail
 
@@ -37,54 +37,45 @@ kubectl -n argocd logs deploy/argocd-application-controller --tail=100
 
 ## 2. Get API and UI access
 
-The server runs with `server.insecure=true`: plain HTTP inside the cluster,
-TLS termination happens outside (port-forward, or the shared Gateway once
-Authentik OIDC is live, [ADR-003](../decisions/ADR-003-argocd.md)).
+Plain HTTP inside the cluster (`server.insecure=true`); TLS terminates outside
+(port-forward, or the shared Gateway once Authentik OIDC is live,
+[ADR-003](../decisions/ADR-003-argocd.md)).
 
-With slice 1 deployed, the normal login is OIDC via Authentik at
-`https://argocd.example.com`; the local `admin` account is break-glass only
-(rotation steps are in step 4 and in
-[authentik-deploy](authentik-deploy.md)). For any local access, port-forward
-still works:
+Normal login is OIDC via Authentik at `https://argocd.example.com`. The local
+`admin` account is break-glass only (rotation: step 4 and
+[authentik-deploy](authentik-deploy.md)).
 
 ```bash
 kubectl -n argocd port-forward svc/argocd-server 8080:80
 ```
 
-Open `http://localhost:8080` (not https). The UI works while pods run; a
-crash-looping server still leaves the API usable through `kubectl` and the
-ArgoCD CRDs directly, which the steps below use.
+Open `http://localhost:8080` (not https). The UI works while pods run. With
+a crash-looping server, `kubectl` and the ArgoCD CRDs still work.
 
 ## 3. Reinstall ArgoCD from IaC
 
-The install is idempotent OpenTofu: the `helm_release` reconciles the
-release `argocd` in namespace `argocd`, and the inline `kubectl_manifest`
-resources reapply the root App of Apps Application `root` and the
-self-management Application `argocd`
-([ADR-002](../decisions/ADR-002-opentofu-terragrunt.md)). From the repo root:
+Idempotent OpenTofu. `helm_release` reconciles release `argocd` in namespace
+`argocd`; `kubectl_manifest` reapply App of Apps `root` and self-management
+Application `argocd` ([ADR-002](../decisions/ADR-002-opentofu-terragrunt.md)).
+From the repo root:
 
 ```bash
 cd infrastructure/stacks/public/argocd
 SOPS_AGE_KEY=<argocd-keypair-private-key> terragrunt stack run apply
 ```
 
-Notes:
-
 - `SOPS_AGE_KEY` is optional. Exporting it recreates the in-cluster Secret
   `sops-age`; leaving it unset skips that resource without error
-- The apply also refreshes Secrets `gitea-repo-creds` (namespace `argocd`)
-  and `dns01-api-token` (namespace `cert-manager`, the DNS provider
-  credential) from the sops `dns_provider` section of
-  `infrastructure/secrets.yaml`
+- The apply also refreshes `gitea-repo-creds` (namespace `argocd`) and
+  `dns01-api-token` (namespace `cert-manager`, the DNS credential) from the sops
+  `dns_provider` section of `infrastructure/secrets.yaml`
 - This repairs a broken release or a deleted namespace. It does not repair a
-  bad git commit; fix git instead and let sync converge
+  bad git commit. Fix git and let sync converge
 
 ## 4. Reset the admin password
 
-Two paths. Prefer the first. After slice 1, run this only for break-glass
-recovery or the one-time rotation in
-[authentik-deploy](authentik-deploy.md) step 8 — day-to-day login goes
-through Authentik OIDC.
+Two paths, prefer the first. Run only for break-glass recovery or the one-time
+rotation in [authentik-deploy](authentik-deploy.md) step 8.
 
 ### Option A: regenerate the initial secret
 
@@ -98,21 +89,17 @@ kubectl -n argocd get secret argocd-initial-admin-secret \
   -o jsonpath='{.data.password}' | base64 -d; echo
 ```
 
-The first patch clears `admin.password` and `admin.passwordMtime` from
-Secret `argocd-secret`. ArgoCD stores only a one-way bcrypt hash there, so
-the server cannot recover the forgotten password from it - deleting
-`argocd-initial-admin-secret` alone does not reveal the old password. With
-both keys cleared and the server restarted, ArgoCD generates a new random
-password on startup, writes the new bcrypt hash into `argocd-secret`, and
-mirrors the plaintext into `argocd-initial-admin-secret`. The automated sync
-of Application `argocd` does not revert this: git declares no
-`admin.password`, so the generated hash stays until the next login writes a
-new one. Log in as user `admin` with the value read above.
+`argocd-secret` holds a one-way bcrypt hash, so deleting
+`argocd-initial-admin-secret` alone never reveals the old password. With
+`admin.password` and `admin.passwordMtime` cleared and the server restarted,
+ArgoCD generates a random password, stores the hash in `argocd-secret`, and
+mirrors the plaintext into `argocd-initial-admin-secret`. Sync of Application
+`argocd` does not revert this: git declares no `admin.password`, so the hash
+stays until the next login. Log in as `admin` with the value read above.
 
 ### Option B: set a known password via a temporary values override
 
-Requires `htpasswd` (from apache2-utils) or any bcrypt generator. Generate a
-hash and pass it in a temporary values file:
+Requires `htpasswd` (from apache2-utils) or any bcrypt generator.
 
 ```bash
 htpasswd -bnBC 10 "" '<new-password>' | tr -d ':\n' > /tmp/hash
@@ -126,30 +113,24 @@ helm -n argocd upgrade argocd argo/argo-cd \
 rm -f /tmp/hash /tmp/argocd-breakglass-values.yaml
 ```
 
-The `--version 9.4.3` above is the chart version this runbook was written
-against; check the version pinned in
-`infrastructure/catalogs/public/k8s-app/argocd.tf` and use that value -
-Renovate bumps the pin over time. This upgrade is break-glass only: the next
-automated sync of Application `argocd` reverts to the git-declared values,
-which removes the override again.
+Check the pin in `infrastructure/catalogs/public/k8s-app/argocd.tf` and use
+that value instead of `--version 9.4.3` (Renovate bumps it). Break-glass only:
+the next sync of Application `argocd` reverts to the git-declared values and
+removes the override.
 
 Normal path for config-only ArgoCD changes: commit under
-`kubernetes/infrastructure/argocd/` and let Application `argocd` sync;
-check it with `kubectl -n argocd get app argocd`. Everything below is
-break-glass.
+`kubernetes/infrastructure/argocd/` and let Application `argocd` sync. Check
+with `kubectl -n argocd get app argocd`. Everything below is break-glass.
 
 ## 5. Break a self-management loop
 
-Self-managed Applications can modify or delete their own configuration; a
-wrong commit then makes sync fight every manual fix. Detach the automation,
-fix git, converge, restore automation:
+A wrong commit makes sync fight every manual fix. Detach, fix git, converge,
+restore:
 
 ```bash
 kubectl -n argocd patch app argocd --type merge \
   -p '{"spec":{"syncPolicy":null}}'
 ```
-
-Then:
 
 1. Fix the offending manifests in git and push
 2. Sync manually until the application converges:
@@ -168,11 +149,9 @@ next sync does not flag drift.
 
 The root Application clones the monorepo using Secret `gitea-repo-creds`
 (namespace `argocd`, label
-`argocd.argoproj.io/secret-type=repository`). Its keys map to the sops
-values: `url` from `gitea.url`, `username` from `gitea.username`,
-`password` from `gitea.token`.
-
-Compare the live Secret against Gitea:
+`argocd.argoproj.io/secret-type=repository`). Its keys map to the sops values:
+`url` from `gitea.url`, `username` from `gitea.username`, `password` from
+`gitea.token`.
 
 ```bash
 kubectl -n argocd get secret gitea-repo-creds \
@@ -192,15 +171,13 @@ If the token expired or was revoked:
 
 ## 7. Verify recovery
 
-Work through all checks before declaring the incident closed:
+Run all checks before closing the incident:
 
 ```bash
 kubectl -n argocd get app root
 kubectl -n argocd get apps
 kubectl -n argocd get pods
 ```
-
-Checklist:
 
 - [ ] Application `root` reports `Synced` and `Healthy`
 - [ ] Child Applications appear (`kubectl -n argocd get apps` matches the
@@ -212,25 +189,25 @@ Checklist:
 
 ## What this runbook does not cover
 
-- Full cluster rebuild from scratch: see
-  `docs/runbooks/cluster-rebuild.md` (GAP: not yet written)
-- Velero restores and etcd snapshots: [ADR-015](../decisions/ADR-015-disaster-recovery.md)
+- Full cluster rebuild from scratch: see `docs/runbooks/cluster-rebuild.md`
+  (GAP: not yet written)
+- Velero restores and etcd snapshots:
+  [ADR-015](../decisions/ADR-015-disaster-recovery.md)
 - Talos and Kubernetes upgrades: see
   [the upgrade runbook](talos-k8s-upgrade.md)
 
 ## Key material
 
-Step 3 injects the private key of the dedicated ArgoCD age keypair into
-Secret `argocd/sops-age` ([ADR-009](../decisions/ADR-009-sops.md)). This
-key is separate from the developer master key and from the sops age key for
+Step 3 injects the private key of the dedicated ArgoCD age keypair into Secret
+`argocd/sops-age` ([ADR-009](../decisions/ADR-009-sops.md)). It is separate
+from the developer master key and from the sops age key for
 `infrastructure/secrets.yaml`:
 
 - Private key location: `~/.config/sops/age/argocd.txt`, untracked, with a
   backup copy in the password manager
-- The key never enters the default `keys.txt`: ordinary host-side `sops`
-  calls do not load it
-- An empty `SOPS_AGE_KEY` is valid: the apply in step 3 skips the Secret
-  cleanly instead of failing
+- The key never enters the default `keys.txt`: ordinary host-side `sops` calls
+  do not load it
+- An empty `SOPS_AGE_KEY` is valid; step 3 skips the Secret instead of failing
 
 Export the key before an apply that must recreate the Secret:
 

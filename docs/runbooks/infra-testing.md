@@ -1,7 +1,8 @@
 # Runbook: Infrastructure Testing
 
-How to run the four test tiers from [ADR-022](../decisions/ADR-022-infrastructure-testing-strategy.md) locally and in CI, and the
-resource-naming contract that keeps test guests away from production.
+Run the four test tiers locally and in CI, and follow the resource-naming
+contract that keeps test guests away from production. Tier strategy:
+[ADR-022](../decisions/ADR-022-infrastructure-testing-strategy.md).
 
 ## Tier overview
 
@@ -15,11 +16,11 @@ resource-naming contract that keeps test guests away from production.
 ## Naming contract (hard rule)
 
 - Test guests: vmid 5900–5999 ONLY, name MUST start with `tftest-`.
-- Production guests live at vmid 110 and 500–503. Anything else you
-  create by hand inside 5900–5999 WILL be destroyed by the nightly sweep
-  once older than 6 hours.
-- The `ci-tests` Proxmox resource pool owns the range; the
-  `ci-runner@pve` API user holds ACL grants limited to it.
+- Production guests live at vmid 110 and 500–503. Anything else you create by
+  hand inside 5900–5999 WILL be destroyed by the nightly sweep once older
+  than 6 hours.
+- The `ci-tests` Proxmox resource pool owns the range. The `ci-runner@pve`
+  API user holds ACL grants limited to it.
 
 ## Running tiers locally (from the host or any machine with routes)
 
@@ -39,17 +40,16 @@ cd infrastructure/stacks/public/proxmox && terragrunt stack run plan
 cd ../garage && terragrunt stack run plan
 ```
 
-Stack-run gotcha: do NOT add a `dependency` block between two units in
-the same stack. `stack run` resolves it by executing `tofu output -json`
-in the dependency unit's generated workdir, but that unit is never inited
-in the run phase, so the executor fails with "Required plugins are not
-installed" and the consuming unit then fails with "There is no variable
-named `dependency`". `mock_outputs` do not help. If the units share
-topology, read the shared base config instead: e.g. `talos-cluster` reads
-IPs and VMIDs straight from `talos/base.hcl`, which is the same
-`cidrhost` formula `talos-vms` computes (see
-`infrastructure/units/public/talos/talos-cluster/terragrunt.hcl`). Same
-class of bug as the `include.<label>.locals` null trap — prefer
+Hard rule: do NOT add a `dependency` block between two units of the same
+stack. `stack run` resolves it by running `tofu output -json` in the
+dependency unit's generated workdir, which the run phase never inits: the
+executor fails with "Required plugins are not installed", then the consuming
+unit fails with "There is no variable named `dependency`". `mock_outputs` do
+not help. Read the shared base config instead: `talos-cluster` reads IPs and
+VMIDs straight from `talos/base.hcl`, the same `cidrhost` formula `talos-vms`
+computes (see
+`infrastructure/units/public/talos/talos-cluster/terragrunt.hcl`). Same class
+of bug as the `include.<label>.locals` null trap: prefer
 `read_terragrunt_config`.
 
 L4 (creates and destroys real guests; ~1.5GB peak RAM; never run two at
@@ -74,42 +74,37 @@ python3 scripts/ci_sweep_test_guests.py --base-url "$PROXMOX_API_URL" \
 ```
 
 The sweep reads `/pools/ci-tests`, whose `members` list carries the same
-vmid/name/uptime/node/type shape as `/cluster/resources`. Two PVE details
-are easy to misread:
+vmid/name/uptime/node/type shape as `/cluster/resources`. Two PVE details:
 
-- `/cluster/resources` is a restricted route: for an account without the
-  required cluster-wide audit privileges PVE answers `501 Method 'GET ...' not implemented`, not 403 — a deliberate mask so denied access
-  looks like a non-existent endpoint.
+- `/cluster/resources` is a restricted route. Without cluster-wide audit
+  privileges PVE answers `501 Method 'GET ...' not implemented`, not 403: a
+  deliberate mask, so denied access looks like a non-existent endpoint.
 - Reading a single pool (`GET /pools/{poolid}`) is NOT granted by pool
-  membership alone. It needs the `Pool.Audit` privilege on
-  `/pool/ci-tests` (`Pool.Allocate` only covers creating and editing
-  pools, not reading them). A denied privilege and a pool id that does
-  not exist both fail the read; the first live sweep run hit the
-  second: `ci-tests` did not exist (only `ci-runner`, empty) and PVE
-  answered 501. Create the pool (`pveum pool create ci-tests`), grant
-  `Pool.Audit` to the ci-runner role (step 3 below), assign the
-  live-tier guests into the pool, then re-run `--dry-run` before
-  relying on the sweep.
+  membership alone. It needs the `Pool.Audit` privilege on `/pool/ci-tests`
+  (`Pool.Allocate` only covers creating and editing pools, not reading them).
+  A denied privilege and a non-existent pool id both fail the read. The first
+  live sweep run hit the second: `ci-tests` did not exist (only `ci-runner`,
+  empty) and PVE answered 501. Fix it in step 3 below, then re-run `--dry-run`
+  before relying on the sweep.
 
 ## One-time self-hosted runner setup checklist
 
 1. Register a Gitea runner on a machine with routes to the Proxmox API
-   (:8006) and Garage (:3900). The LAN runner is registered with the
-   `ubuntu-latest` label (the default for `act_runner`); workflows target
-   it with `runs-on: ubuntu-latest`.
+   (:8006) and Garage (:3900), with the `ubuntu-latest` label (the
+   `act_runner` default) that the workflows target with
+   `runs-on: ubuntu-latest`.
 2. The workflows bootstrap their own toolchain: OpenTofu via the
    `opentofu/setup-opentofu` action, terragrunt and sops via download
-   steps in `.gitea/workflows/tofu-plan.yaml`. The runner host itself
-   only needs `python3` plus outbound routes to Gitea, GitHub, the
-   Proxmox API (:8006) and Garage (:3900).
+   steps in `.gitea/workflows/tofu-plan.yaml`. The runner host only needs
+   `python3` plus outbound routes to Gitea, GitHub, the Proxmox API
+   (:8006) and Garage (:3900).
 3. Proxmox: create user `ci-runner@pve`, role limited to VM/LXC
    create/start/stop/destroy on pool `ci-tests`, issue an API token.
-   Create the pool with `pveum pool create ci-tests` — the sweep reads
-   its `members` list, and a missing pool id makes PVE answer 501. Add
-   the `Pool.Audit` privilege on `/pool/ci-tests` to that role
-   (`Pool.Allocate` is only for pool create/edit/delete, so it does not
-   help the read). Assign the live-tier guests into the pool so the
-   sweep can see them.
+   Create the pool with `pveum pool create ci-tests` (the sweep reads
+   its `members` list, and a missing pool id makes PVE answer 501). Add
+   `Pool.Audit` on `/pool/ci-tests` to that role (`Pool.Allocate` covers
+   pool create/edit/delete only, so it does not help the read). Assign
+   the live-tier guests into the pool so the sweep can see them.
 4. Age: generate a dedicated keypair; add its public key to the
    recipients in `.sops.yaml` creation rules; re-encrypt
    `infrastructure/secrets.yaml` (sops rotate -i -r).
@@ -118,29 +113,25 @@ are easy to misread:
 
 ## Current gaps
 
-- The VM live harness boots hardware without an installer ISO; it proves
+- The VM live harness boots hardware without an installer ISO. It proves
   catalog wiring, not guest OS health. Guest-agent-based assertions are a
   possible follow-up.
-- The live VM fixture pins a static MAC (`bc:24:11:2a:3b:4c`); a leaked
+- The live VM fixture pins a static MAC (`bc:24:11:2a:3b:4c`). A leaked
   vmid-5901 guest can ARP-conflict until the sweep removes it (≤6h
   window).
-- `lxc_ostemplate` default in the live wrappers duplicates the
-  Renovate-managed pin in ansible/roles/proxmox_base/defaults/main.yaml;
-  the wrapper default previously diverged from that pin (12.7 vs 12.12,
-  fixed in this commit). Update them together (Renovate does not know
-  about the wrapper).
+- The `lxc_ostemplate` default in the live wrappers duplicates the
+  Renovate-managed pin in `ansible/roles/proxmox_base/defaults/main.yaml`.
+  The wrapper default previously diverged from that pin (12.7 vs 12.12). Update
+  them together; Renovate does not know about the wrapper.
 
 ## CI plan identity (first-time host apply)
 
-The argocd stack is planned against the live cluster, so the runner needs
-a read-only kubeconfig. The unit
-`infrastructure/units/public/ci/ci-plan` provisions exactly that (RBAC and
-a long-lived ServiceAccount token) and emits the ready kubeconfig as an
-output. `ci-plan` is a **standalone unit — it must never join a stack**:
-the plan loop it serves has no cluster access until this unit exists, and
-letting the runner re-apply its own credentials would be a self-escalation
-vector. Apply it from a workstation that holds the talosctl admin
-kubeconfig, once:
+The runner needs a read-only kubeconfig for the live-cluster argocd plan. The
+unit `infrastructure/units/public/ci/ci-plan` provisions it (RBAC and a
+long-lived ServiceAccount token) and emits the ready kubeconfig as an output.
+`ci-plan` is a **standalone unit, never a stack member**: letting the runner
+re-apply its own credentials would be a self-escalation vector. Apply once,
+from a workstation holding the talosctl admin kubeconfig:
 
 1. Confirm the argocd stack is applied (the `argocd` and `cert-manager`
    namespaces must exist; the unit binds Roles inside them).
@@ -154,25 +145,24 @@ kubeconfig, once:
    workflow writes it to `$HOME/.kube/config` before planning.
 
 The granted access is read-only: namespaces cluster-wide, Secrets inside
-`argocd`/`cert-manager`, and `argoproj.io` Applications inside `argocd`.
-No write verbs anywhere — plan only. The apply phase uses a separate
-identity (next section); never widen this one.
+`argocd`/`cert-manager`, and `argoproj.io` Applications inside `argocd`. No
+write verbs anywhere, plan only. The apply phase uses a separate identity
+(next section). Never widen this one.
 
 ## CI apply identity (first-time host apply)
 
 The `tofu-apply` workflow applies the exact plan binaries from the matching
-`tofu-plan` run after a PR merges. It authenticates with a second kubeconfig.
-The unit `infrastructure/units/public/ci/ci-apply` provisions that identity
+`tofu-plan` run after a PR merges, authenticated with a second kubeconfig. The
+unit `infrastructure/units/public/ci/ci-apply` provisions that identity
 (ServiceAccount `ci-apply`, token Secret, ClusterRoleBinding to
 `cluster-admin`) and emits the ready kubeconfig as an output. Like `ci-plan`,
-it is a **standalone unit — it must never join a stack**: giving the runner
-the rights to re-apply its own credentials would be a self-escalation vector.
+it is a **standalone unit, never a stack member**: giving the runner rights
+to re-apply its own credentials would be a self-escalation vector.
 `cluster-admin` is deliberate: the workflow applies every stack, so it needs
-the same reach as a host apply; the merge to `main` is the approval gate.
+host-apply reach. The merge to `main` is the approval gate.
 
-Prerequisite: the `ci-plan` unit must be applied first (it creates the
-`ci-system` namespace). Apply from a workstation that holds the talosctl
-admin kubeconfig:
+Prerequisite: apply the `ci-plan` unit first (it creates the `ci-system`
+namespace). Apply from a workstation holding the talosctl admin kubeconfig:
 
 1. In `infrastructure/units/public/ci/ci-apply`, with the host kubeconfig
    active in `~/.kube/config` and `SOPS_AGE_KEY` exported:
@@ -198,12 +188,12 @@ The `tofu-apply` workflow then, on every push to `main` that touches
 
 ## Verification history
 
-| Date       | Check                                                  | Result                                                                                                                |
-| ---------- | ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
-| 2026-09-06 | Sweep dry-run live (first run)                         | failed 501: pool `ci-tests` did not exist (only `ci-runner`, empty); create pool, grant `Pool.Audit`, retry           |
-| 2026-09-07 | Sweep dry-run live (base URL with `/api2/json` suffix) | pass — `no stale test guests found`; the trailing `/api2/json` segment in `PROXMOX_API_URL` is stripped by the script |
-| 2026-09-07 | L1/L2 green in CI                                      | pass — static/unit tiers on the LAN runner; static tflint `-c` config bug fixed in this PR (re-run after merge)       |
-| 2026-09-07 | L4 dispatch creates+destroys both guests               | pass                                                                                                                  |
-| 2026-09-07 | Sweep destroys planted tftest-orphan (5999)            | pass                                                                                                                  |
+| Date       | Check                                                  | Result                                                                                                               |
+| ---------- | ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| 2026-09-06 | Sweep dry-run live (first run)                         | failed 501: pool `ci-tests` did not exist (only `ci-runner`, empty); create pool, grant `Pool.Audit`, retry          |
+| 2026-09-07 | Sweep dry-run live (base URL with `/api2/json` suffix) | pass: `no stale test guests found`; the trailing `/api2/json` segment in `PROXMOX_API_URL` is stripped by the script |
+| 2026-09-07 | L1/L2 green in CI                                      | pass: static/unit tiers on the LAN runner; static tflint `-c` config bug fixed in this PR (re-run after merge)       |
+| 2026-09-07 | L4 dispatch creates+destroys both guests               | pass                                                                                                                 |
+| 2026-09-07 | Sweep destroys planted tftest-orphan (5999)            | pass                                                                                                                 |
 
-Update this table as tiers go live. Known gaps above must stay honest.
+Update this table as tiers go live.

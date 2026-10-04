@@ -1,7 +1,8 @@
 # Runbook: Garage LXC Setup and Bootstrap
 
-Installs and operates the Garage S3 server that hosts the remote OpenTofu
-state backend ([ADR-010](../decisions/ADR-010-garage.md)) and object storage ([ADR-015](../decisions/ADR-015-disaster-recovery.md)). Garage runs as a
+Installs and operates the Garage S3 server that holds the OpenTofu state
+backend ([ADR-010](../decisions/ADR-010-garage.md)) and the backup objects
+([ADR-015](../decisions/ADR-015-disaster-recovery.md)). Garage runs as a
 Proxmox LXC guest, not inside Kubernetes (rulebook rule OBJ-01).
 
 ## Prerequisites
@@ -9,9 +10,9 @@ Proxmox LXC guest, not inside Kubernetes (rulebook rule OBJ-01).
 - Garage LXC provisioned by the `garage-lxc` unit
   (`infrastructure/units/public/proxmox/garage-lxc/`), running, reachable
   from the host as `root@<garage_lxc.ip>` with the `lxc_admin` key
-- The Debian base image is ensured automatically by the `proxmox_base` role
-  (`pveam` tag): it downloads the pinned template
-  (`proxmox_base_pveam_template`) into the host's local storage if missing
+- The `proxmox_base` role (`pveam` tag) ensures the Debian base image: it
+  downloads the pinned template (`proxmox_base_pveam_template`) into the
+  host's local storage if missing
 - `infrastructure/secrets.yaml` has `network_config.garage_lxc.ip` and
   `.gw` plus `ssh_keys.lxc_admin` (used by the garage-lxc unit)
 - Ansible collections installed on the host:
@@ -41,10 +42,9 @@ Required keys:
 
 `ansible_host` must equal the address part of
 `network_config.garage_lxc.ip`, which is stored as a CIDR
-(e.g. `192.0.2.10/24`).
-
-`ansible_host` and `ansible_user` are duplicated with the garage-lxc unit
-inputs; keeping both encrypted here matches the existing zoidberg convention.
+(e.g. `192.0.2.10/24`). `ansible_host` and `ansible_user` are duplicated with
+the garage-lxc unit inputs; both stay encrypted here, matching the zoidberg
+convention.
 
 The admin token is the shared secret for the OpenTofu garage provider
 (`garage/admin` API on port 3903). Record it in
@@ -63,27 +63,24 @@ From `ansible/` on the host:
 ansible-playbook playbooks/bootstrap.yaml
 ```
 
-The play targets the `lxc` group, installs the pinned Garage 2.3.0 binary
-(checksum-verified), writes `/etc/garage.toml` (the binary's default config
-path; secrets from the vault), installs the `garage` systemd service, and
-smoke-checks `garage node id`. To run only this step later:
+The play targets the `lxc` group: pinned Garage 2.3.0 binary,
+checksum-verified; `/etc/garage.toml` written from the vault; `garage` systemd
+service; smoke-check `garage node id`. To run only this step later:
 
 ```bash
 ansible-playbook playbooks/bootstrap.yaml --limit garage-01 --tags garage
 ```
 
-If the role runs before the host vars vault exists, sops decryption fails;
-create the vault first (step 1).
+If the role runs before the host vars vault exists, sops decryption fails.
+Create the vault first (step 1).
 
 ## 3. Bootstrap the cluster layout
 
 Done by the playbook: the garage role assigns the node role
 (`garage layout assign -z dc1 <node id>`), applies the layout, and confirms
-the cluster is healthy (`garage status`). The role is idempotent: once the
-node has a role, re-runs skip assign and apply. The layout lives in
-Garage's meta db, not in git.
-
-Verify manually:
+health (`garage status`). Idempotent: once the node has a role, re-runs skip
+assign and apply. The layout lives in Garage's meta db, not in git. Verify
+manually:
 
 ```bash
 ssh -i ~/.ssh/lxc_admin_ed25519 root@192.0.2.10
@@ -94,8 +91,8 @@ garage status
 
 ## 4. Provision the state bucket and access key
 
-Requires Terragrunt with the Stacks feature (v0.78.0 or newer; the repo uses
-explicit stacks defined in `infrastructure/stacks/public/*/terragrunt.stack.hcl`).
+Requires Terragrunt with the Stacks feature (v0.78.0 or newer). The repo uses
+explicit stacks defined in `infrastructure/stacks/public/*/terragrunt.stack.hcl`.
 From `infrastructure/` on the host:
 
 ```bash
@@ -105,25 +102,26 @@ cd ../garage
 terragrunt stack run apply
 ```
 
-The garage stack (`infrastructure/stacks/public/garage/`) applies two
-units: `tofu-state` creates the state bucket and its `tofu-state` key, and
-`k8s-backup` creates the application backup bucket and its
-`authentik-backup` key. Both use the `schwitzd/garage` provider and the
-admin token from step 1. The keys have separate bucket bindings.
+The garage stack (`infrastructure/stacks/public/garage/`) applies two units:
+`tofu-state` (state bucket plus
+`tofu-state` key) and `k8s-backup` (application backup bucket plus
+`authentik-backup` key), both on the `schwitzd/garage` provider with the admin
+token from step 1, with separate bucket bindings. The state key stays
+available through the `tofu-state` unit output.
 
-The state key remains available through the `tofu-state` unit output. The
-Authentik runbook copies the `k8s-backup` unit outputs into
-`garage.k8s_backup.*` in `infrastructure/secrets.yaml` without printing the
-secret value.
+Store the state unit's `access_key_id` and `secret_access_key` in
+`infrastructure/secrets.yaml` as `garage.s3.access_key_id` and
+`garage.s3.secret_access_key`. The Authentik runbook copies the
+`k8s-backup` unit outputs into `garage.k8s_backup.*` in
+`infrastructure/secrets.yaml`, without printing the secret value.
 
 ### Troubleshooting: stale or broken generated stack
 
 `stack run` fails with "folder that does not contain a `terragrunt.hcl` file"
-pointing at a generated unit path: the `.terragrunt-stack` directory holds
-stale units from an earlier generation (`stack generate` never deletes files
-it no longer produces), or the CAS copy of the unit source failed on
-provider-cache symlinks that escape the repository root. Regenerate from a
-clean state:
+pointing at a generated unit path. Two causes: stale units in
+`.terragrunt-stack` from an earlier generation (`stack generate` never
+deletes files it no longer produces), or a failed CAS copy on provider-cache
+symlinks that escape the repository root. Regenerate from a clean state:
 
 ```bash
 cd stacks/public/proxmox   # or stacks/public/garage
@@ -132,19 +130,14 @@ find infrastructure/units -name .terragrunt-cache -type d -prune -exec rm -rf {}
 terragrunt stack run plan --no-cas
 ```
 
-`--no-cas` skips the content-addressed copy; remove it once the source
+`--no-cas` skips the content-addressed copy. Remove it once the source
 directories no longer contain escaping symlinks.
-
-Store the state unit's `access_key_id` and `secret_access_key` in
-`infrastructure/secrets.yaml` as `garage.s3.access_key_id` and
-`garage.s3.secret_access_key`. The application backup key uses the separate
-`garage.k8s_backup.*` paths documented in the Authentik runbook.
 
 ### Migrating state from the former buckets/keys units
 
 If this stack was applied while it still had separate `buckets` and `keys`
 units, import their resources into the merged `tofu-state` unit instead of
-recreating them — the access key secret is only visible at creation:
+recreating them. The access key secret is only visible at creation:
 
 ```bash
 cd infrastructure
@@ -161,10 +154,10 @@ terragrunt apply
 
 `garage_bucket_key` cannot be imported: the provider's importer is a plain
 passthrough and drops the composite `<bucket_id>:<access_key_id>` id. Its
-create path only re-asserts permissions on the existing binding, so the
-one to-add in the plan converges without touching Garage. Afterwards remove
-the old unit directories and their local state under
-`terraform.tfstate.d/`, then regenerate the stack.
+create path only re-asserts permissions on the existing binding, so the one
+to-add converges without touching Garage. Afterwards remove the old unit
+directories and their local state under `terraform.tfstate.d/`, then
+regenerate the stack.
 
 ## 5. Verify S3 access
 
@@ -205,15 +198,12 @@ fail with `InvalidAccessKeyId` / `SignatureDoesNotMatch`. Region must match
   5. Verify `garage status` shows the healthy node advertising the new `v`
      version
 
-  The role installs exactly `garage_version`, asserts the binary's
-  `--version` matches it, and fails the run otherwise. It then restarts the
-  daemon whenever `garage status` advertises a different version (the
-  2.3.0-on-disk-but-2.4.1 incident), so the running process never lags the
-  pinned binary. Running the playbook before the pin is filled — the new
-  `garage_version` with the old `garage_checksum` still set — hard-fails at
-  the pin-mismatch guard as intended: that guard is the trust barrier.
-  Without the CI, use the degraded un-pinned path instead: empty
-  `garage_checksum` in `defaults/main.yaml`, or pass it inline with
+  The role installs exactly `garage_version`, asserts the binary's `--version`
+  matches it, and restarts the daemon when `garage status` advertises a
+  different version, so the running process never lags the pinned binary.
+  Before the pin is filled (new `garage_version`, old `garage_checksum`) the
+  run hard-fails at the pin-mismatch guard, the trust barrier. Without the CI:
+  empty `garage_checksum` in `defaults/main.yaml`, or pass it inline with
   `--extra-vars 'garage_checksum='`.
 
   ```bash
@@ -227,17 +217,14 @@ fail with `InvalidAccessKeyId` / `SignatureDoesNotMatch`. Region must match
 ### Live verification
 
 For each scenario, run against the live node:
-`ansible-playbook playbooks/bootstrap.yaml --limit garage-01 --tags garage`,
-then confirm the result with `garage status`.
+`ansible-playbook playbooks/bootstrap.yaml --limit garage-01 --tags garage`.
+Then confirm with `garage status`.
 
-(a) Pinned upgrade: open the Renovate PR raising `garage_version`, confirm
-the garage-checksum CI committed the matching `garage_checksum` pin, merge
-the PR, run the convergence command, and assert the healthy node in
-`garage status` reports the new `v` version.
+(a) Pinned upgrade: run the 5 steps above.
 
-(b) Idempotency: run the playbook again unchanged; expect no download and
-no daemon restart (the version and checksum are already satisfied).
+(b) Idempotency: run the playbook again unchanged. Expect no download and no
+daemon restart (the version and checksum are already satisfied).
 
-(c) Degraded un-pinned run: clear `garage_checksum` and run once; expect a
+(c) Degraded un-pinned run: clear `garage_checksum` and run once. Expect a
 successful HTTPS-trust install with the computed `sha256:` printed for
 pinning.

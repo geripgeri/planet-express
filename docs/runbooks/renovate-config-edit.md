@@ -26,12 +26,10 @@ RENOVATE_CONFIG_FILE=renovate.json5 \
   --platform=local --dry-run=true
 ```
 
-Notes:
-
-- `--platform=local` reads the local git repo; no token, no remote needed.
-  Do NOT pass a repo path argument — `repositories` is unsupported with
+- `--platform=local` reads the local git repo, no token and no remote. Do
+  NOT pass a repo path argument: `repositories` is unsupported with
   `platform=local`.
-- `LOG_LEVEL=debug` only when inspecting; default run prints little.
+- `LOG_LEVEL=debug` only when inspecting; the default run prints little.
 - Known warnings, not errors: `RE2 not usable` (falls back to RegExp),
   `Rate limit exceeded for api.github.com` / `github-token-required`
   (no hostRules in sandbox).
@@ -49,19 +47,19 @@ Notes:
 - Debian LXC template manager: `"depName": "debian-12-standard"`,
   `"currentValue": "12.12-1"`, correct `replaceString`. The pveam registry is
   **HTTP on purpose**: download.proxmox.com does not serve TLS for that
-  hostname — HTTPS answers with the enterprise.proxmox.com certificate
-  (`ERR_TLS_CERT_ALTNAME_INVALID`), and Proxmox keeps it that way by design.
-  A `Failed to look up custom.pveam package ... no-result` warning means the
+  hostname, and HTTPS answers with the enterprise.proxmox.com certificate
+  (`ERR_TLS_CERT_ALTNAME_INVALID`). A
+  `Failed to look up custom.pveam package ... no-result` warning means the
   fetch failed at all, not just TLS: Renovate swallows every custom-datasource
   fetch error into a null result, which surfaces as `no-result`. The sandbox
-  additionally blocks port 80 by policy, so this lookup stays a known warning
-  here; on the host/runner confirm the warning disappears and the debug log
-  lists debian-12-standard releases for the manager.
-- Guard rule merged: in the resolved config dump, the final
-  `packageRules` entry has `"matchPackageNames": ["siderolabs/talos", ...]`,
+  also blocks port 80 by policy, so this lookup stays a known warning here. On
+  the host/runner confirm the warning disappears and the debug log lists
+  debian-12-standard releases for the manager.
+- Guard rule merged: in the resolved config dump, the final `packageRules`
+  entry has `"matchPackageNames": ["siderolabs/talos", ...]`,
   `"automerge": false`, `"prPriority": 10`,
-  `"labels": ["renovate", "cluster-upgrade"]` — it must stay the LAST rule
-  (or at least after the automerge rules) so `automerge: false` wins.
+  `"labels": ["renovate", "cluster-upgrade"]`. It must stay the LAST rule (or
+  at least after the automerge rules) so `automerge: false` wins.
 
 ## 2. Ship
 
@@ -76,24 +74,24 @@ Normal PR flow (leela/fry). Do not merge the config PR and a
 ## 3. Triage Renovate PRs
 
 - **`cluster-upgrade` label** (Talos/K8s): never automerged by design.
-  Follow `docs/runbooks/talos-k8s-upgrade.md` — maintenance window, etcd
+  Follow `docs/runbooks/talos-k8s-upgrade.md`: maintenance window, etcd
   snapshot, plan expectations.
-- **`garage-upgrade` label**: never automerged. The sha256 checksum is
-  auto-filled by the garage-checksum workflow; still verify the binary with
-  `--version` and `sha256sum` during review before merging.
+- **`garage-upgrade` label**: never automerged. The garage-checksum workflow
+  auto-fills the sha256 checksum. Still verify the binary with `--version` and
+  `sha256sum` during review before merging.
 - **`security` label**: OSV vulnerability alerts, `prPriority: 20`, not held
   by `minimumReleaseAge`. Merge promptly.
-- **Everything else** (minor/patch, non-0.x): automerged by the last rules —
-  nothing to do. Digests + lockfile maintenance also automerge.
-- **`ignored: gitea-incompatible actions`**: `enabled: false`, an immortal PR
-  here means the ignore rule stopped matching — re-check the action name.
+- **Everything else** (minor/patch, non-0.x): automerged by the last rules,
+  nothing to do. Digests and lockfile maintenance also automerge.
+- **`ignored: gitea-incompatible actions`**: `enabled: false`. An immortal PR
+  here means the ignore rule stopped matching. Re-check the action name.
 
 ## 4. If a config change misbehaves
 
-- Re-run step 1 — the debug log shows the merged config, extraction and
-  `skipReason`s; 90% of issues are regex/`managerFilePatterns` mismatches.
+- Re-run step 1. The debug log shows the merged config, extraction and
+  `skipReason`s. Most issues are regex or `managerFilePatterns` mismatches.
 - Confirm the guard is still the last matching rule for
-  `siderolabs/talos`/`kubernetes/kubernetes` (rule order is decisive for
-  `automerge`).
+  `siderolabs/talos`/`kubernetes/kubernetes`. Rule order is decisive for
+  `automerge`.
 - On the host, full validation with a real token:
   `RENOVATE_TOKEN=<gitea-token> npx renovate-config-validator`
