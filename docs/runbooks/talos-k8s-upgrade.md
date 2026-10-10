@@ -20,17 +20,16 @@ not `CrashLoopBackOff`).
 - Clean git tree on `main`, pinned versions in
   `infrastructure/units/public/talos/talos-cluster/terragrunt.hcl` (`version`,
   `kubernetes_version`)
-- `siderolabs/talos` provider still pinned to `0.11.0` in
+- `siderolabs/talos` provider pinned to `0.12.0` in
   `infrastructure/catalogs/public/talos/main.tf`, and
-  `.terraform.lock.hcl` agrees. `0.12.x` renders the Talos v1.14 config
-  documents while the templates in `infrastructure/catalogs/public/talos/files/`
-  still patch the v1alpha1 paths, and every node rejects the mixture. The pin is
-  deliberate: hostDNS is neutralised by the `coredns-upstream-keeper` CronJob, so
-  the `ResolverConfig` document is not needed. See
-  [ADR-023](../decisions/ADR-023-coredns-upstream-kyverno.md) and
+  `.terraform.lock.hcl` agrees. 0.12.0 renders the Talos v1.14 multi-document
+  config set, which the templates in
+  `infrastructure/catalogs/public/talos/files/` now patch. A provider bump that
+  changes the rendered document set needs the templates migrated in the same
+  change: a v1alpha1 field next to its replacement document is rejected by
+  every node. `tofu init` prints the provider version it resolved; check it
+  against the lockfile before anything else. See
   `docs/incidents/talos-provider-012-machine-config-incident-2026-10-10.md`.
-  `tofu init` prints the provider version it resolved; check it against the
-  lockfile before anything else.
 - `tofu`, `terragrunt`, `talosctl`, `kubectl` available (tfswitch/tgswitch)
 - Maintenance window. Expected downtime: brief per-node service restarts,
   ArgoCD auth breakage (secrets regeneration)
@@ -264,9 +263,9 @@ kubectl -n argocd get applications
 # hostDNS link-local socket, which has no daemon behind it after an upgrade
 # and makes all cluster DNS dead (SERVFAIL/empty answers for every record,
 # including gitea.yourdomain.internal). Talos v1.14 enables hostDNS by
-# default and its config moved to the ResolverConfig document, which the
-# pinned talos provider (0.11.0) cannot encode; disabling it needs the full
-# v1.14 document migration (see ADR-023). Fixed in the interim by the
+# default and its config lives in the ResolverConfig document, so
+# hostDNS.enabled: false is a template change (see ADR-023). Fixed in the
+# interim by the
 # coredns-upstream-keeper CronJob
 # (kubernetes/infrastructure/private/coredns-upstream/cronjob.yaml;
 # export-ignored, carries the real resolver IPs) that re-applies the pinned

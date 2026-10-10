@@ -1,7 +1,7 @@
 # Post-mortem: talos provider 0.12.0 blocked every machine config apply, 2026-10-10
 
 - **Date**: 2026-10-10
-- **Status**: Resolved, provider reverted to `0.11.0`
+- **Status**: Resolved. Reverted to `0.11.0` on the day, templates migrated and provider back on `0.12.0` later the same day
 - **Component**: `siderolabs/talos` OpenTofu provider, `talos-cluster` unit
 - **Severity**: Cluster reconfiguration blocked. No machine config apply of any kind succeeded, which also blocked every Kubernetes version bump.
 - **Duration**: About one hour to root cause, about one hour to finish the upgrade it blocked
@@ -145,16 +145,47 @@ investigation.
 - **Reverted the provider to `0.11.0`** in
   `infrastructure/catalogs/public/talos/main.tf` and regenerated
   `infrastructure/units/public/talos/talos-cluster/.terraform.lock.hcl`. All four
-  machine config applies succeed. The `0.11.0` pin is load-bearing and
-  [ADR-023](../decisions/ADR-023-coredns-upstream-kyverno.md) depends on it: hostDNS
-  is neutralised by the `coredns-upstream-keeper` CronJob, so the `ResolverConfig`
-  document that `0.12.x` unlocks is not needed.
+  machine config applies succeed.
 - **Renovate guard for the provider.** The `custom.regex` guard covered the Talos
   and Kubernetes *version* pins. The provider arrived through the `terraform`
   manager and matched nothing, so it inherited the global minor/patch automerge.
   `renovate.json5` now carries a separate rule for it.
 - **Drain step in the upgrade runbook**, with the PDB relaxation the Longhorn
   layout requires.
+
+## Provider migration
+
+The revert above restored service but left the provider on a version below the
+current one. Templates now patch the Talos v1.14 documents, the provider is back
+on `0.12.0`, and all four nodes converged.
+
+| Old v1alpha1 key                 | Replacement document                                                         |
+| -------------------------------- | ---------------------------------------------------------------------------- |
+| `machine.install.image`          | dropped, the provider generates `UnattendedInstallConfig` from the schematic |
+| `cluster.network.cni.name: none` | `KubeFlannelCNIConfig` with `$patch: delete`                                 |
+| `cluster.proxy.disabled: true`   | `KubeProxyConfig` with `$patch: delete`                                      |
+| `machine.network.nameservers`    | `ResolverConfig.nameservers[].address`                                       |
+| `machine.network.interfaces`     | `LinkConfig` plus `DHCPv4Config`                                             |
+| `machine.features.kubePrism`     | dropped, `KubePrismConfig` is emitted enabled on port 7445                   |
+| `machine.kubelet.extraMounts`    | dropped, see below                                                           |
+
+The `extraMounts` block bind-mounting `/var/mnt/longhorn` into the kubelet was
+removed on the strength of the SideroLabs position in
+[siderolabs/talos#13053](https://github.com/siderolabs/talos/issues/13053):
+`/var/mnt` paths should never appear there and `UserVolumeConfig` alone is
+enough, which `longhorn_volume.tfmpl` already did. The same issue documents the
+`rshared` pattern failing kubelet restarts with `ENOSPC`, which leave nodes
+unrecoverable without a reboot. Longhorn ran clean across the rollout: every
+`instance-manager` and `engine-image` pod reached 1/1 Running with zero restarts.
+
+Two rejections came only from the node, and neither was visible to plan or
+static checks:
+
+- `UnattendedInstallConfig: provisioning.diskSelector.match is required` — a
+  patch that set only `installer.image` replaced the document and dropped the
+  provider's `provisioning` block. The patch turned out to be redundant.
+- `LinkConfig/ens18: route 0 destination must be a valid IP prefix` — a default
+  route must omit `destination` entirely rather than set `0.0.0.0/0`.
 
 ## Lessons learned
 

@@ -60,8 +60,12 @@ GitOps loop.
   carries the old keys (`.machine.install`, `.machine.network.nameservers`,
   `.machine.cluster.network`, `.machine.features.kubePrism`,
   `.machine.cluster.proxy`, `.machine.kubelet`) fails with "cannot be used
-  with ... document" conflicts. The full migration is a separate, large
-  rework of the talos catalog, not something to chain onto an incident fix.
+  with ... document" conflicts. **Settled 2026-10-10:** the catalog templates
+  now patch the replacement documents and the provider sits on `0.12.0`, so this
+  option is open again. It stayed closed through the
+  [2026-10-10 incident](../incidents/talos-provider-012-machine-config-incident-2026-10-10.md)
+  because the migration and the provider bump must land together; the bump alone
+  broke every machine config apply.
 - **Kyverno mutation of the coreDNS Corefile.** coreDNS's upstream comes
   from its ConfigMap, which Talos re-renders from its addon. A Kyverno
   `ClusterPolicy` mutating the `coredns` ConfigMap (kube-system) to pin the
@@ -139,12 +143,13 @@ Both mechanisms share the same private/export-ignored placement and need the
 same ArgoCD private-app source wiring: the keeper's `coredns-upstream`
 directory now, the policies path when the ClusterPolicy lands.
 
-The machine config stays untouched: the talos provider remains on the
-`0.11.0` pin and hostDNS stays `enabled: true` on the nodes, but it is
-inert for pod DNS because the keeper's Corefile sends every upstream query
-straight to the resolvers, never to the dead link-local socket. The manual
-ConfigMap patch applied during the incident is replaced by the keeper's
-managed generation.
+The machine config moved to the Talos v1.14 documents on 2026-10-10 and the
+provider sits on `0.12.0`, but hostDNS stays `enabled: true` on the nodes: the
+keeper's Corefile sends every upstream query straight to the resolvers, so the
+dead link-local socket is inert for pod DNS either way. Turning hostDNS off is
+now a one-line `ResolverConfig.hostDNS.enabled: false` and waits on the
+follow-up below, not on a catalog migration. The manual ConfigMap patch applied
+during the incident is replaced by the keeper's managed generation.
 
 ## Consequences
 
@@ -190,8 +195,8 @@ managed generation.
 - Install Kyverno ([ADR-014](ADR-014-kyverno.md)), then apply the ClusterPolicy above, delete the
   keeper CronJob, and wire the policies path into its private ArgoCD app.
   The ClusterPolicy content is not committed yet. Reproduce it from this ADR.
-- Migrate the talos catalog to v1.14-style documents (ResolverConfig,
-  UnattendedInstallConfig, KubeNetworkConfig, KubePrismConfig,
-  KubeProxyConfig) in a dedicated branch. Once complete, disable hostDNS
-  via the `ResolverConfig` document (`hostDNS.enabled: false`) and drop
-  the keeper/policy: the upgrades then need no post-hoc convergence.
+- Disable hostDNS via the `ResolverConfig` document
+  (`hostDNS.enabled: false`) and drop the keeper/policy: the upgrades then
+  need no post-hoc convergence. The catalog is on the v1.14 documents and the
+  provider on `0.12.0` as of 2026-10-10, so this is now a single template
+  change rather than a migration.

@@ -284,18 +284,21 @@
       "labels": ["renovate", "cluster-upgrade"]
     },
 
-    // Guard: the siderolabs/talos OpenTofu provider NEVER auto-merges. It is
-    // pinned to 0.11.0 on purpose (ADR-023): 0.12.x renders the Talos v1.14
-    // config documents while the catalog templates still patch the v1alpha1
-    // paths, every node rejects the mixture, and no machine config apply
-    // succeeds until the pin moves back. See
-    // docs/incidents/talos-provider-012-machine-config-incident-2026-10-10.md.
+    // Guard: the siderolabs/talos OpenTofu provider NEVER auto-merges.
     //
-    // The guard above covers the Talos and Kubernetes *version* pins through the
-    // custom.regex manager. A provider bump arrives through the terraform
+    // Each 0.x minor is a real config-format move, not a library bump. 0.12.0
+    // switched the rendered machine config from the v1alpha1 blob to the
+    // Talos v1.14 multi-document set, which is why it had to land together
+    // with the template migration in
+    // infrastructure/catalogs/public/talos/files/*.tfmpl. A future 0.13 will
+    // do the same to whatever v1.15 introduces.
+    //
+    // The guard above covers the Talos and Kubernetes *version* pins through
+    // the custom.regex manager. A provider bump arrives through the terraform
     // manager, matched no rule, and inherited the global minor/patch automerge;
-    // PR 123 merged that way on 7/7 green CI. Plan and static checks never apply
-    // to a node, so no CI gate can catch this class of change.
+    // PR 123 merged that way on 7/7 green CI and broke every machine config
+    // apply. Plan and static checks never apply to a node, so no CI gate can
+    // catch this class of change.
     //
     // Declared after the automerge rules so automerge:false wins.
     {
