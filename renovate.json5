@@ -284,6 +284,28 @@
       "labels": ["renovate", "cluster-upgrade"]
     },
 
+    // Guard: the siderolabs/talos OpenTofu provider NEVER auto-merges. It is
+    // pinned to 0.11.0 on purpose (ADR-023): 0.12.x renders the Talos v1.14
+    // config documents while the catalog templates still patch the v1alpha1
+    // paths, every node rejects the mixture, and no machine config apply
+    // succeeds until the pin moves back. See
+    // docs/incidents/talos-provider-012-machine-config-incident-2026-10-10.md.
+    //
+    // The guard above covers the Talos and Kubernetes *version* pins through the
+    // custom.regex manager. A provider bump arrives through the terraform
+    // manager, matched no rule, and inherited the global minor/patch automerge;
+    // PR 123 merged that way on 7/7 green CI. Plan and static checks never apply
+    // to a node, so no CI gate can catch this class of change.
+    //
+    // Declared after the automerge rules so automerge:false wins.
+    {
+      "matchManagers": ["terraform"],
+      "matchPackageNames": ["siderolabs/talos"],
+      "automerge": false,
+      "prPriority": 10,
+      "labels": ["renovate", "cluster-upgrade"]
+    },
+
     // Kubernetes is capped at 1.37 by the Talos 1.14 support matrix
     // (talos.dev/v1.14/introduction/support-matrix): K8s 1.38 requires a newer
     // Talos. Renovate must not propose K8s 1.38 before Talos 1.15 is pinned.

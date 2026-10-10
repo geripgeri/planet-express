@@ -20,6 +20,17 @@ not `CrashLoopBackOff`).
 - Clean git tree on `main`, pinned versions in
   `infrastructure/units/public/talos/talos-cluster/terragrunt.hcl` (`version`,
   `kubernetes_version`)
+- `siderolabs/talos` provider still pinned to `0.11.0` in
+  `infrastructure/catalogs/public/talos/main.tf`, and
+  `.terraform.lock.hcl` agrees. `0.12.x` renders the Talos v1.14 config
+  documents while the templates in `infrastructure/catalogs/public/talos/files/`
+  still patch the v1alpha1 paths, and every node rejects the mixture. The pin is
+  deliberate: hostDNS is neutralised by the `coredns-upstream-keeper` CronJob, so
+  the `ResolverConfig` document is not needed. See
+  [ADR-023](../decisions/ADR-023-coredns-upstream-kyverno.md) and
+  `docs/incidents/talos-provider-012-machine-config-incident-2026-10-10.md`.
+  `tofu init` prints the provider version it resolved; check it against the
+  lockfile before anything else.
 - `tofu`, `terragrunt`, `talosctl`, `kubectl` available (tfswitch/tgswitch)
 - Maintenance window. Expected downtime: brief per-node service restarts,
   ArgoCD auth breakage (secrets regeneration)
@@ -169,6 +180,68 @@ Notes:
   talosctl -n <ip> upgrade \
     --image factory.talos.dev/metal-installer/<schematic-id>:<version>
   ```
+
+### A node that fails to upgrade: drain blocked by disruption budgets
+
+`talosctl upgrade` cordons, drains, reboots, then uncordons. On a node running
+Longhorn the drain never finishes:
+
+```
+talos-j1p-g4i: error cordoning node: failed to drain node "talos-j1p-g4i":
+  [error when evicting pods/"instance-manager-..." -n "longhorn-system":
+   client rate limiter Wait returned an error: rate: Wait(n=1) would exceed
+   context deadline, ...]
+```
+
+Longhorn creates one PodDisruptionBudget per instance-manager pod with
+`minAvailable: 1`. There is exactly one pod behind each budget, so
+`ALLOWED DISRUPTIONS` is `0` and evictions are refused. `talosctl upgrade` retries
+until its client-side rate limiter exceeds the deadline, returns non-zero, and
+leaves the node cordoned and still on the old version. `kubectl drain` run by hand
+loops indefinitely with `Cannot evict pod as it would violate the pod's disruption budget`.
+
+Check what is blocking the node:
+
+```bash
+kubectl get pdb -A
+```
+
+`kubectl drain --disable-pdb` is feature-gated and absent from some builds.
+`kubectl drain --help | grep disable-pdb` tells you which you have. Where it is
+missing, relax the budgets instead:
+
+```bash
+# Longhorn recreates each budget at minAvailable 1 when its instance-manager
+# comes back, so nothing needs restoring by hand.
+kubectl get pdb -n longhorn-system -o name | xargs -I{} \
+  kubectl patch {} -n longhorn-system --type=merge \
+    -p '{"spec":{"minAvailable":0}}'
+
+# Any single-replica budget on the node needs the same treatment.
+kubectl get pdb -A -o wide          # identify the pods still pinned to this node
+kubectl patch pdb <budget-name> -n <namespace> --type=merge \
+  -p '{"spec":{"minAvailable":0}}'
+
+kubectl drain <node-name> \
+  --ignore-daemonsets --delete-emptydir-data --force --timeout=300s
+```
+
+`--ignore-daemonsets` is required. `instance-manager`, `longhorn-manager`,
+`engine-image` and the `cilium` agents are DaemonSets that the node reboot kills
+anyway; they must not gate the eviction of everything else.
+
+Then upgrade the node and confirm it took:
+
+```bash
+talosctl -n <ip> upgrade \
+  --image factory.talos.dev/metal-installer/<schematic-id>:<version>
+talosctl -n <ip> version
+```
+
+`talosctl version` prints a client tag and a server tag. The **server** tag is the
+one that must read the new version. Do not rely on the `rolling_upgrade` log line:
+after a failed upgrade it reports `Worker <ip> back up after upgrade` because that
+wait loop polls reachability, and a node that never rebooted answers just fine.
 
 ## 6. Post-upgrade verification
 
