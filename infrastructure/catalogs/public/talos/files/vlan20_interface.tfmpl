@@ -1,18 +1,29 @@
-machine:
-  network:
-    nameservers:
+apiVersion: v1alpha1
+kind: ResolverConfig
+nameservers:
 %{ for ns in vlan10_nameservers ~}
-      - ${ns}
+  - address: ${ns}
 %{ endfor ~}
-    interfaces:
-      - interface: ens18
-        dhcp: true
-        dhcpOptions:
-          routeMetric: 100
-        routes:
-          - network: 0.0.0.0/0
-            gateway: ${vlan10_gateway}
-            metric: 100
-      - interface: ens19
-        addresses:
-          - ${vlan20_ip}
+---
+apiVersion: v1alpha1
+kind: LinkConfig
+name: ens18
+up: true
+routes:
+  # No destination: Talos creates the default route for the address family
+  # of the gateway. Setting `0.0.0.0/0` explicitly is rejected by the node
+  # with "route 0 destination must be a valid IP prefix".
+  - gateway: ${vlan10_gateway}
+    metric: 100
+---
+apiVersion: v1alpha1
+kind: DHCPv4Config
+name: ens18
+routeMetric: 100
+---
+apiVersion: v1alpha1
+kind: LinkConfig
+name: ens19
+up: true
+addresses:
+  - address: ${vlan20_ip}
