@@ -1,363 +1,348 @@
 {
-  $schema: "https://docs.renovatebot.com/renovate-schema.json",
+  $schema: 'https://docs.renovatebot.com/renovate-schema.json',
   dependencyDashboard: true,
-  // Let Renovate merge PRs via the API itself: platform-native automerge
-  // needs Gitea >= 1.24 and branch auto-delete, and is unreliable otherwise.
   platformAutomerge: false,
-
-  // Automerge only after the Tofu Lockfile workflow is green: provider bumps
-  // drift the unit lockfiles, and .gitea/workflows/tofu-lockfile.yaml commits
-  // the regenerated .terraform.lock.hcl back to the PR branch.
-  //
-  // Renovate 44 deprecated requiredStatusChecks (array form is stripped by
-  // migration; only null -> ignoreTests is handled). Renovate itself waits
-  // for every status on the branch to be green. The tofu-lockfile workflow
-  // therefore has no on.paths filter: it always runs and always posts the
-  // "lockfile" job status, so infra PRs gate on the real check and other
-  // PRs are not stuck on a check that never appears (PR #122).
-  //
-  // fry's risk tool keeps its own copy of this list in
-  // DEFAULT_REQUIRED_STATUS_CHECKS, so the "missing required checks" signal
-  // survives the migration. Status context on Gitea is
-  // "Tofu Lockfile / lockfile (pull_request)"; it matches by substring.
-  //
-  // Guard rules and the incident behind each one: ADR-004.
-
-  "extends": ["config:recommended"],
-  "timezone": "UTC",
-  "labels": ["renovate"],
-
-  // ArgoCD manager: bump chart pins in Application manifests
-  // (spec.source.targetRevision when spec.source.chart is set). The default
-  // fileMatch does not cover this repo's layout, so point it at the child
-  // Application manifests explicitly. cert-manager and longhorn chart
-  // versions then ride the normal Renovate loop; automerge follows the
-  // global minor/patch rule. The vendored Gateway API CRDs are NOT managed:
-  // a version bump without re-downloading the upstream bundle would lie,
-  // so that stays a manual re-vendor (see the header comment in the file).
-  "argocd": {
-    "managerFilePatterns": ["/^kubernetes/infrastructure/private/apps/.*\\.yaml$/"]
-  },
-
-  // Raise a PR immediately when OSV publishes a vulnerability affecting
-  // a resolved version in the lockfile — bypasses minimumReleaseAge.
-  "osvVulnerabilityAlerts": true,
-
-  "customManagers": [
-    // Custom regex manager: updates the copyright year in the LICENSE file.
-    // The "current year" comes from the custom.year datasource (timeapi.io).
-    // The start year (2026) is static; the template rewrites the line to a
-    // "2026-YYYY" range, e.g. 2026 -> 2026-2027 -> 2026-2028.
-    {
-      "customType": "regex",
-      "managerFilePatterns": ["/^LICENSE$/"],
-      "matchStrings": [
-        "Copyright \\(c\\) (?:2026\\s*[-–—]\\s*)?(?<currentValue>\\d{4})"
-      ],
-      "datasourceTemplate": "custom.year",
-      "depNameTemplate": "license-year",
-      "versioningTemplate": "loose",
-      "autoReplaceStringTemplate": "Copyright (c) 2026-{{newValue}}"
-    },
-    // Custom regex managers: flag Talos + Kubernetes version bumps in the
-    // talos-cluster unit. The native terragrunt manager cannot see these —
-    // they are plain strings in `inputs`, not provider/terraform blocks.
-    // Cluster upgrades are manual-only (see the guard rule below).
-    {
-      "customType": "regex",
-      "managerFilePatterns": ["/^infrastructure\\/units\\/public\\/talos\\/talos-cluster\\/terragrunt\\.hcl$/"],
-      "matchStrings": [
-        "talos_cluster_details\\s*=\\s*\\{[\\s\\S]*?version\\s*=\\s*\"(?<currentValue>v[0-9]+\\.[0-9]+\\.[0-9]+(-[a-zA-Z0-9.-]+)?)\""
-      ],
-      "datasourceTemplate": "github-tags",
-      "depNameTemplate": "siderolabs/talos",
-      "versioningTemplate": "semver"
-    },
-    {
-      "customType": "regex",
-      "managerFilePatterns": ["/^infrastructure\\/units\\/public\\/talos\\/talos-cluster\\/terragrunt\\.hcl$/"],
-      "matchStrings": [
-        "kubernetes_version\\s*=\\s*\"(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)\""
-      ],
-      "datasourceTemplate": "github-tags",
-      "depNameTemplate": "kubernetes/kubernetes",
-      "versioningTemplate": "semver",
-      "extractVersionTemplate": "^v(?<version>.*)$"
-    },
-    // Custom regex manager: Garage server version pin in the garage Ansible
-    // role. Releases are tagged on the project's own Gitea instance
-    // (git.deuxfleurs.fr); tags carry a v prefix while the pinned value is
-    // bare semver, hence extractVersion. The sha256 checksum line below the
-    // version cannot be produced by Renovate (release-API metadata carries no
-    // hashes and garage publishes none); it is computed and committed by the
-    // garage-checksum workflow (.gitea/workflows/garage-checksum.yaml) and
-    // still verified by hand at review time
-    // (docs/runbooks/garage-lxc-setup.md).
-    {
-      "customType": "regex",
-      "managerFilePatterns": ["/^ansible\\/roles\\/garage\\/defaults\\/main\\.yaml$/"],
-      "matchStrings": [
-        "garage_version:\\s*\"(?<currentValue>\\d+\\.\\d+\\.\\d+)\""
-      ],
-      "datasourceTemplate": "gitea-tags",
-      "registryUrlTemplate": "https://git.deuxfleurs.fr",
-      "depNameTemplate": "Deuxfleurs/garage",
-      "versioningTemplate": "semver",
-      "extractVersionTemplate": "^v(?<version>.*)$"
-    },
-    // Custom regex manager: Debian LXC container template pin in the
-    // proxmox_base Ansible role. The pin has a single source of truth — the
-    // shared OpenTofu include (infrastructure/units/public/proxmox/base.hcl)
-    // reads this line at plan time. Releases come from the Proxmox image
-    // directory listing; Renovate's html format turns every <a href> into a
-    // release and extractVersion keeps only debian-12-standard_*_amd64
-    // files, so Debian major bumps (13.x) stay manual by construction.
-    // The registry MUST be plain HTTP: download.proxmox.com does not serve
-    // TLS for this hostname by design — HTTPS is reserved for the
-    // subscription-gated enterprise.proxmox.com, and any strict client gets
-    // ERR_TLS_CERT_ALTNAME_INVALID there (the enterprise cert has no
-    // download.proxmox.com SAN). This matches how pveam itself fetches
-    // templates; the pin only selects a filename, image integrity is
-    // enforced where the template is actually downloaded.
-    {
-      "customType": "regex",
-      "managerFilePatterns": ["/^ansible\\/roles\\/proxmox_base\\/defaults\\/main\\.yaml$/"],
-      "matchStrings": [
-        "proxmox_base_pveam_template:\\s*debian-12-standard_(?<currentValue>\\d+\\.\\d+-\\d+)_amd64\\.tar\\.zst"
-      ],
-      "datasourceTemplate": "custom.pveam",
-      "depNameTemplate": "debian-12-standard",
-      "versioningTemplate": "loose",
-      "extractVersionTemplate": "^debian-12-standard_(?<version>\\d+\\.\\d+-\\d+)_amd64\\.tar\\.zst$",
-      "autoReplaceStringTemplate": "proxmox_base_pveam_template: debian-12-standard_{{{newValue}}}_amd64.tar.zst"
-    },
-    // Custom regex manager: Talos ISO version pin in proxmox_base role. Single source with talos-vms terragrunt.
-    {
-      "customType": "regex",
-      "managerFilePatterns": ["/^ansible\\/roles\\/proxmox_base\\/defaults\\/main\\.yaml$/"],
-      "matchStrings": ["proxmox_base_talos_iso_version:\\s*\"(?<currentValue>v[0-9]+\\.[0-9]+\\.[0-9]+)\""],
-      "datasourceTemplate": "github-tags",
-      "depNameTemplate": "siderolabs/talos",
-      "versioningTemplate": "semver"
-    },
-    // Custom regex manager: Cilium Helm chart version pins in Terraform.
-    // Single source is the catalog vars.tf default + unit terragrunt.hcl pin.
-    {
-      "customType": "regex",
-      "managerFilePatterns": ["/^infrastructure\\/catalogs\\/public\\/cilium\\/vars\\.tf$/", "/^infrastructure\\/units\\/public\\/cilium\\/terragrunt\\.hcl$/"],
-      "matchStrings": ["cilium_version\\s*=\\s*\"(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)\""],
-      "datasourceTemplate": "github-tags",
-      "depNameTemplate": "cilium/cilium",
-      "versioningTemplate": "semver"
-    },
-    // Custom regex managers: pinned tool versions inside the Gitea Actions
-    // workflows. The built-in github-actions manager covers `uses:` refs,
-    // but binaries installed via curl (terragrunt, gitleaks, trivy) and the
-    // setup-opentofu version input are plain strings no default manager
-    // reads. Each entry maps one pin to its upstream GitHub releases.
-    {
-      "customType": "regex",
-      "managerFilePatterns": ["/^\\.gitea\\/workflows\\/[^/]+\\.ya?ml$/"],
-      "matchStrings": [
-        "tofu_version:\\s*\"?(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)\"?"
-      ],
-      "datasourceTemplate": "github-tags",
-      "depNameTemplate": "opentofu/opentofu",
-      "versioningTemplate": "semver",
-      "extractVersionTemplate": "^v(?<version>.*)$"
-    },
-    {
-      "customType": "regex",
-      "managerFilePatterns": ["/^\\.gitea\\/workflows\\/[^/]+\\.ya?ml$/"],
-      "matchStrings": [
-        "TG_VERSION:\\s*\"?(?<currentValue>v[0-9]+\\.[0-9]+\\.[0-9]+)\"?"
-      ],
-      "datasourceTemplate": "github-tags",
-      "depNameTemplate": "gruntwork-io/terragrunt",
-      "versioningTemplate": "semver"
-    },
-    {
-      "customType": "regex",
-      "managerFilePatterns": ["/^\\.gitea\\/workflows\\/[^/]+\\.ya?ml$/"],
-      "matchStrings": [
-        "GITLEAKS_VERSION:\\s*\"?(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)\"?"
-      ],
-      "datasourceTemplate": "github-tags",
-      "depNameTemplate": "gitleaks/gitleaks",
-      "versioningTemplate": "semver",
-      "extractVersionTemplate": "^v(?<version>.*)$"
-    },
-    {
-      "customType": "regex",
-      "managerFilePatterns": ["/^\\.gitea\\/workflows\\/[^/]+\\.ya?ml$/"],
-      "matchStrings": [
-        "TRIVY_VERSION:\\s*\"?(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)\"?"
-      ],
-      "datasourceTemplate": "github-tags",
-      "depNameTemplate": "aquasecurity/trivy",
-      "versioningTemplate": "semver",
-      "extractVersionTemplate": "^v(?<version>.*)$"
-    }
+  extends: [
+    'config:recommended',
   ],
-  "customDatasources": {
-    "year": {
-      "defaultRegistryUrlTemplate": "https://timeapi.io/api/Time/current/zone?timeZone=UTC",
-      "format": "json",
-      "transformTemplates": [
-        "{'releases': [{'version': $string($.year)}]}"
-      ]
-    },
-    // HTTP on purpose — see the pveam custom regex manager above: HTTPS on
-    // download.proxmox.com permanently presents the enterprise.proxmox.com
-    // certificate, which fails hostname verification.
-    "pveam": {
-      "defaultRegistryUrlTemplate": "http://download.proxmox.com/images/system/",
-      "format": "html"
-    }
-  },
-  "packageRules": [
-    // These managers keep prPriority but not automerge:false, because all
-    // non-breaking (minor/patch) updates are auto-merged by the last rule
-    // regardless of manager. Only major/breaking updates always stay manual.
-    {"matchManagers": ["terraform"], "prPriority": 5},
-    {"matchManagers": ["terragrunt"], "prPriority": 5},
-    {
-      "matchManagers": ["pre-commit"],
-      "prPriority": 6,
-      "matchPackageNames": ["/^pre-commit/", "/.*-hook$/", "/.*hook-.*/"]
-    },
-    {"matchDatasources": ["pypi"], "minimumReleaseAge": "1 week"},
-    {"matchManagers": ["github-actions"], "prPriority": 5},
-    {
-      "matchDepNames": ["license-year"],
-      // The yearly copyright-line PR is text-only and confirmed by Renovate's
-      // own re-extract check, so it is safe to auto-merge.
-      "automerge": true,
-      "prPriority": 10,
-      "groupName": "chore: license year updates"
-    },
-
-    // Ignore GitHub Actions that are incompatible with Gitea (prevent immortal PRs)
-    {
-      "matchDepNames": ["actions/download-artifact", "actions/upload-artifact"],
-      "enabled": false,
-      "automerge": false,
-      "prPriority": 0,
-      "groupName": "ignored: gitea-incompatible actions"
-    },
-
-    // OpenTofu providers and modules live on registry.opentofu.org
-    {
-      "matchDatasources": ["terraform-provider", "terraform-module"],
-      "registryUrls": ["https://registry.opentofu.org"]
-    },
-
-    // Vulnerability alerts should jump the queue and never be held
-    // by the minimumReleaseAge gate set above for pypi packages.
-    {
-      "matchCategories": ["security"],
-      "prPriority": 20,
-      "minimumReleaseAge": "0 days",
-      "labels": ["renovate", "security"]
-    },
-
-    // Auto-merge non-breaking updates (minor/patch, excluding 0.x which may
-    // break at any time). This rule is declared last so its automerge:true
-    // wins for the managers above too - that is intended: automerge covers all
-    // non-breaking updates, only major/breaking changes stay manual.
-    {
-      "matchUpdateTypes": ["minor", "patch"],
-      "matchCurrentVersion": "!/^0\\./",
-      "automerge": true
-    },
-    {
-      "matchUpdateTypes": ["digest", "lockFileMaintenance"],
-      "automerge": true
-    },
-    // Guard: Talos/Kubernetes upgrades NEVER auto-merge. Declared after the
-    // automerge rules so automerge:false wins.
-    // Follow docs/runbooks/talos-k8s-upgrade.md (upgrade flow)
-    // and docs/runbooks/renovate-config-edit.md (validating config changes).
-    {
-      "matchManagers": ["custom.regex"],
-      "matchPackageNames": ["siderolabs/talos", "kubernetes/kubernetes"],
-      "automerge": false,
-      "prPriority": 10,
-      "labels": ["renovate", "cluster-upgrade"]
-    },
-
-    // Guard: the siderolabs/talos OpenTofu provider NEVER auto-merges.
-    //
-    // Each 0.x minor is a real config-format move, not a library bump. 0.12.0
-    // switched the rendered machine config from the v1alpha1 blob to the
-    // Talos v1.14 multi-document set, which is why it had to land together
-    // with the template migration in
-    // infrastructure/catalogs/public/talos/files/*.tfmpl. A future 0.13 will
-    // do the same to whatever v1.15 introduces.
-    //
-    // The guard above covers the Talos and Kubernetes *version* pins through
-    // the custom.regex manager. A provider bump arrives through the terraform
-    // manager, matched no rule, and inherited the global minor/patch automerge;
-    // PR 123 merged that way on 7/7 green CI and broke every machine config
-    // apply. Plan and static checks never apply to a node, so no CI gate can
-    // catch this class of change.
-    //
-    // Declared after the automerge rules so automerge:false wins.
-    {
-      "matchManagers": ["terraform"],
-      "matchPackageNames": ["siderolabs/talos"],
-      "automerge": false,
-      "prPriority": 10,
-      "labels": ["renovate", "cluster-upgrade"]
-    },
-
-    // Kubernetes is capped at 1.37 by the Talos 1.14 support matrix
-    // (talos.dev/v1.14/introduction/support-matrix): K8s 1.38 requires a newer
-    // Talos. Renovate must not propose K8s 1.38 before Talos 1.15 is pinned.
-    // Follow docs/runbooks/talos-k8s-upgrade.md (two-phase upgrade flow).
-    {
-      "matchManagers": ["custom.regex"],
-      "matchPackageNames": ["kubernetes/kubernetes"],
-      "allowedVersions": "< 1.38.0"
-    },
-
-    // Guard: Garage server upgrades NEVER auto-merge. It hosts the OpenTofu
-    // remote state (ADR-010); a bad bump breaks state access for every unit.
-    // The checksum is auto-filled on renovate-bot PRs by the garage-checksum
-    // workflow (.gitea/workflows/garage-checksum.yaml); still verify the
-    // binary during review, per docs/runbooks/garage-lxc-setup.md §6.
-    // Declared last so automerge:false wins.
-    {
-      "matchManagers": ["custom.regex"],
-      "matchDepNames": ["Deuxfleurs/garage"],
-      "automerge": false,
-      "prPriority": 8,
-      "labels": ["renovate", "garage-upgrade"]
-    },
-
-    // Guard: Cilium chart upgrades NEVER auto-merge — CNI is the data plane for
-    // every pod (ADR-005). A bad minor bumps all nodes' BPF programs.
-    {
-      "matchManagers": ["custom.regex"],
-      "matchPackageNames": ["cilium/cilium"],
-      "automerge": false,
-      "prPriority": 9,
-      "labels": ["renovate", "cni-upgrade"]
-    },
-    // Guard: Longhorn chart upgrades NEVER auto-merge — chart minors have
-    // shipped storage-engine behaviour changes, and this chart IS the CSI
-    // driver for every stateful workload (ADR-007). A bad auto-merged bump
-    // lands mid-week with nobody watching. Cert-manager chart minors stay
-    // under the global automerge rule: upstream guarantees API stability
-    // within a minor and the webhook rollout is self-healing.
-    {
-      "matchManagers": ["argocd", "helm"],
-      "matchDepNames": ["longhorn"],
-      "automerge": false,
-      "prPriority": 9,
-      "labels": ["renovate", "storage-upgrade"]
-    }
+  timezone: 'UTC',
+  labels: [
+    'renovate',
   ],
-  "prHourlyLimit": 2,
-  "prConcurrentLimit": 5
+  argocd: {
+    managerFilePatterns: [
+      '/^kubernetes/infrastructure/private/apps/.*\\.yaml$/',
+    ],
+  },
+  osvVulnerabilityAlerts: true,
+  customManagers: [
+    {
+      customType: 'regex',
+      managerFilePatterns: [
+        '/^LICENSE$/',
+      ],
+      matchStrings: [
+        'Copyright \\(c\\) (?:2026\\s*[-–—]\\s*)?(?<currentValue>\\d{4})',
+      ],
+      datasourceTemplate: 'custom.year',
+      depNameTemplate: 'license-year',
+      versioningTemplate: 'loose',
+      autoReplaceStringTemplate: 'Copyright (c) 2026-{{newValue}}',
+    },
+    {
+      customType: 'regex',
+      managerFilePatterns: [
+        '/^infrastructure\\/units\\/public\\/talos\\/talos-cluster\\/terragrunt\\.hcl$/',
+      ],
+      matchStrings: [
+        'talos_cluster_details\\s*=\\s*\\{[\\s\\S]*?version\\s*=\\s*"(?<currentValue>v[0-9]+\\.[0-9]+\\.[0-9]+(-[a-zA-Z0-9.-]+)?)"',
+      ],
+      datasourceTemplate: 'github-tags',
+      depNameTemplate: 'siderolabs/talos',
+      versioningTemplate: 'semver',
+    },
+    {
+      customType: 'regex',
+      managerFilePatterns: [
+        '/^infrastructure\\/units\\/public\\/talos\\/talos-cluster\\/terragrunt\\.hcl$/',
+      ],
+      matchStrings: [
+        'kubernetes_version\\s*=\\s*"(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)"',
+      ],
+      datasourceTemplate: 'github-tags',
+      depNameTemplate: 'kubernetes/kubernetes',
+      versioningTemplate: 'semver',
+      extractVersionTemplate: '^v(?<version>.*)$',
+    },
+    {
+      customType: 'regex',
+      managerFilePatterns: [
+        '/^ansible\\/roles\\/garage\\/defaults\\/main\\.yaml$/',
+      ],
+      matchStrings: [
+        'garage_version:\\s*"(?<currentValue>\\d+\\.\\d+\\.\\d+)"',
+      ],
+      datasourceTemplate: 'gitea-tags',
+      registryUrlTemplate: 'https://git.deuxfleurs.fr',
+      depNameTemplate: 'Deuxfleurs/garage',
+      versioningTemplate: 'semver',
+      extractVersionTemplate: '^v(?<version>.*)$',
+    },
+    {
+      customType: 'regex',
+      managerFilePatterns: [
+        '/^ansible\\/roles\\/proxmox_base\\/defaults\\/main\\.yaml$/',
+      ],
+      matchStrings: [
+        'proxmox_base_pveam_template:\\s*debian-12-standard_(?<currentValue>\\d+\\.\\d+-\\d+)_amd64\\.tar\\.zst',
+      ],
+      datasourceTemplate: 'custom.pveam',
+      depNameTemplate: 'debian-12-standard',
+      versioningTemplate: 'loose',
+      extractVersionTemplate: '^debian-12-standard_(?<version>\\d+\\.\\d+-\\d+)_amd64\\.tar\\.zst$',
+      autoReplaceStringTemplate: 'proxmox_base_pveam_template: debian-12-standard_{{{newValue}}}_amd64.tar.zst',
+    },
+    {
+      customType: 'regex',
+      managerFilePatterns: [
+        '/^ansible\\/roles\\/proxmox_base\\/defaults\\/main\\.yaml$/',
+      ],
+      matchStrings: [
+        'proxmox_base_talos_iso_version:\\s*"(?<currentValue>v[0-9]+\\.[0-9]+\\.[0-9]+)"',
+      ],
+      datasourceTemplate: 'github-tags',
+      depNameTemplate: 'siderolabs/talos',
+      versioningTemplate: 'semver',
+    },
+    {
+      customType: 'regex',
+      managerFilePatterns: [
+        '/^infrastructure\\/catalogs\\/public\\/cilium\\/vars\\.tf$/',
+        '/^infrastructure\\/units\\/public\\/cilium\\/terragrunt\\.hcl$/',
+      ],
+      matchStrings: [
+        'cilium_version\\s*=\\s*"(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)"',
+      ],
+      datasourceTemplate: 'github-tags',
+      depNameTemplate: 'cilium/cilium',
+      versioningTemplate: 'semver',
+    },
+    {
+      customType: 'regex',
+      managerFilePatterns: [
+        '/^\\.gitea\\/workflows\\/[^/]+\\.ya?ml$/',
+      ],
+      matchStrings: [
+        'tofu_version:\\s*"?(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)"?',
+      ],
+      datasourceTemplate: 'github-tags',
+      depNameTemplate: 'opentofu/opentofu',
+      versioningTemplate: 'semver',
+      extractVersionTemplate: '^v(?<version>.*)$',
+    },
+    {
+      customType: 'regex',
+      managerFilePatterns: [
+        '/^\\.gitea\\/workflows\\/[^/]+\\.ya?ml$/',
+      ],
+      matchStrings: [
+        'TG_VERSION:\\s*"?(?<currentValue>v[0-9]+\\.[0-9]+\\.[0-9]+)"?',
+      ],
+      datasourceTemplate: 'github-tags',
+      depNameTemplate: 'gruntwork-io/terragrunt',
+      versioningTemplate: 'semver',
+    },
+    {
+      customType: 'regex',
+      managerFilePatterns: [
+        '/^\\.gitea\\/workflows\\/[^/]+\\.ya?ml$/',
+      ],
+      matchStrings: [
+        'GITLEAKS_VERSION:\\s*"?(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)"?',
+      ],
+      datasourceTemplate: 'github-tags',
+      depNameTemplate: 'gitleaks/gitleaks',
+      versioningTemplate: 'semver',
+      extractVersionTemplate: '^v(?<version>.*)$',
+    },
+    {
+      customType: 'regex',
+      managerFilePatterns: [
+        '/^\\.gitea\\/workflows\\/[^/]+\\.ya?ml$/',
+      ],
+      matchStrings: [
+        'TRIVY_VERSION:\\s*"?(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)"?',
+      ],
+      datasourceTemplate: 'github-tags',
+      depNameTemplate: 'aquasecurity/trivy',
+      versioningTemplate: 'semver',
+      extractVersionTemplate: '^v(?<version>.*)$',
+    },
+  ],
+  customDatasources: {
+    year: {
+      defaultRegistryUrlTemplate: 'https://timeapi.io/api/Time/current/zone?timeZone=UTC',
+      format: 'json',
+      transformTemplates: [
+        "{'releases': [{'version': $string($.year)}]}",
+      ],
+    },
+    pveam: {
+      defaultRegistryUrlTemplate: 'http://download.proxmox.com/images/system/',
+      format: 'html',
+    },
+  },
+  packageRules: [
+    {
+      matchManagers: [
+        'terraform',
+      ],
+      prPriority: 5,
+    },
+    {
+      matchManagers: [
+        'terragrunt',
+      ],
+      prPriority: 5,
+    },
+    {
+      matchManagers: [
+        'pre-commit',
+      ],
+      prPriority: 6,
+      matchPackageNames: [
+        '/^pre-commit/',
+        '/.*-hook$/',
+        '/.*hook-.*/',
+      ],
+    },
+    {
+      matchDatasources: [
+        'pypi',
+      ],
+      minimumReleaseAge: '1 week',
+    },
+    {
+      matchManagers: [
+        'github-actions',
+      ],
+      prPriority: 5,
+    },
+    {
+      matchDepNames: [
+        'license-year',
+      ],
+      automerge: true,
+      prPriority: 10,
+      groupName: 'chore: license year updates',
+    },
+    {
+      matchDepNames: [
+        'actions/download-artifact',
+        'actions/upload-artifact',
+      ],
+      enabled: false,
+      automerge: false,
+      prPriority: 0,
+      groupName: 'ignored: gitea-incompatible actions',
+    },
+    {
+      matchDatasources: [
+        'terraform-provider',
+        'terraform-module',
+      ],
+      registryUrls: [
+        'https://registry.opentofu.org',
+      ],
+    },
+    {
+      matchCategories: [
+        'security',
+      ],
+      prPriority: 20,
+      minimumReleaseAge: '0 days',
+      labels: [
+        'renovate',
+        'security',
+      ],
+    },
+    {
+      matchUpdateTypes: [
+        'minor',
+        'patch',
+      ],
+      matchCurrentVersion: '!/^0\\./',
+      automerge: true,
+    },
+    {
+      matchUpdateTypes: [
+        'digest',
+        'lockFileMaintenance',
+      ],
+      automerge: true,
+    },
+    {
+      matchManagers: [
+        'custom.regex',
+      ],
+      matchPackageNames: [
+        'siderolabs/talos',
+        'kubernetes/kubernetes',
+      ],
+      automerge: false,
+      prPriority: 10,
+      labels: [
+        'renovate',
+        'cluster-upgrade',
+      ],
+    },
+    {
+      matchManagers: [
+        'terraform',
+      ],
+      matchPackageNames: [
+        'siderolabs/talos',
+      ],
+      automerge: false,
+      prPriority: 10,
+      labels: [
+        'renovate',
+        'cluster-upgrade',
+      ],
+    },
+    {
+      matchManagers: [
+        'custom.regex',
+      ],
+      matchPackageNames: [
+        'kubernetes/kubernetes',
+      ],
+      allowedVersions: '< 1.38.0',
+    },
+    {
+      matchManagers: [
+        'custom.regex',
+      ],
+      matchDepNames: [
+        'Deuxfleurs/garage',
+      ],
+      automerge: false,
+      prPriority: 8,
+      labels: [
+        'renovate',
+        'garage-upgrade',
+      ],
+    },
+    {
+      matchManagers: [
+        'custom.regex',
+      ],
+      matchPackageNames: [
+        'cilium/cilium',
+      ],
+      automerge: false,
+      prPriority: 9,
+      labels: [
+        'renovate',
+        'cni-upgrade',
+      ],
+    },
+    {
+      matchManagers: [
+        'argocd',
+        'helm',
+      ],
+      matchDepNames: [
+        'longhorn',
+      ],
+      automerge: false,
+      prPriority: 9,
+      labels: [
+        'renovate',
+        'storage-upgrade',
+      ],
+    },
+  ],
+  prHourlyLimit: 2,
+  prConcurrentLimit: 5,
 }
