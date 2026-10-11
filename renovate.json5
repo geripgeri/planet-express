@@ -16,10 +16,12 @@
   // "lockfile" job status, so infra PRs gate on the real check and other
   // PRs are not stuck on a check that never appears (PR #122).
   //
-  // fry's risk tool still reads this list for "missing required checks".
-  // Status context on Gitea is "Tofu Lockfile / lockfile (pull_request)";
-  // fry matches by substring ("lockfile" in context).
-  "requiredStatusChecks": ["lockfile"],
+  // fry's risk tool keeps its own copy of this list in
+  // DEFAULT_REQUIRED_STATUS_CHECKS, so the "missing required checks" signal
+  // survives the migration. Status context on Gitea is
+  // "Tofu Lockfile / lockfile (pull_request)"; it matches by substring.
+  //
+  // Guard rules and the incident behind each one: ADR-004.
 
   "extends": ["config:recommended"],
   "timezone": "UTC",

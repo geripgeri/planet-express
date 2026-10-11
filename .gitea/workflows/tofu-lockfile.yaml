@@ -1,9 +1,10 @@
 name: Tofu Lockfile
 
-# No on.paths filter: renovate.json5 requiredStatusChecks and the fry risk
-# tool both expect a "lockfile" status on every PR. Path-filtered runs never
-# post that status, so non-infrastructure PRs (e.g. setup-uv) sit forever
-# with a missing required check (PR #122). Heavy work is gated in-job instead.
+# No on.paths filter: the fry risk tool expects a "lockfile" status on every
+# PR (DEFAULT_REQUIRED_STATUS_CHECKS, which replaced renovate.json5's removed
+# requiredStatusChecks key). Path-filtered runs never post that status, so
+# non-infrastructure PRs (e.g. setup-uv) sit forever with a missing required
+# check (PR #122). Heavy work is gated in-job instead.
 on:
   pull_request:
     branches: [ main ]

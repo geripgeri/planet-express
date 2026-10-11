@@ -65,6 +65,60 @@ Dependabot stays active on the public Codeberg (see [ADR-002](ADR-002-opentofu-t
 
 Renovate PRs are the trigger for [n8n](https://n8n.io/) + [Ollama](https://ollama.com/) summarisation. Renovate's structured, consistent PR metadata (standardised titles, predictable diffs, machine-readable changelogs) gives that automation a reliable hook. An earlier version of this workflow auto-merged PRs after a positive LLM assessment; that was removed. A 7-8B local model has no access to CVE feeds and no knowledge of which transitive dependencies handle auth or crypto in this stack, and supply chain attacks targeting dependency update PRs are documented and active. The model gives a faster path to an informed human decision. It does not make the decision.
 
+## Amendment (2026-10-11): Automerge Guards and the Config Migration
+
+### Context
+
+The decision above says minor and patch updates automerge when CI passes. That rule
+is correct for most dependencies and dangerous for four of them. Each broke
+something before a guard existed:
+
+| Dependency                           | Failure mode                                                                                                                                                                                    | Reference                                                                                                                                            |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `siderolabs/talos` OpenTofu provider | 0.12.0 renders Talos v1.14 documents while the catalog templates still patch v1alpha1 paths. Every node rejects the mixture, so no machine config apply succeeds. PR 123 merged on 7/7 green CI | [talos-provider-012 incident](../incidents/talos-provider-012-machine-config-incident-2026-10-10.md), [ADR-023](ADR-023-coredns-upstream-kyverno.md) |
+| `Deuxfleurs/garage`                  | Hosts the OpenTofu remote state, so a bad bump breaks state access for every unit                                                                                                               | [ADR-010](ADR-010-garage.md)                                                                                                                         |
+| `cilium/cilium`                      | CNI is the data plane for every pod. A bad minor bumps all nodes' BPF programs                                                                                                                  | [ADR-005](ADR-005-cilium-gateway-api.md)                                                                                                             |
+| `longhorn`                           | The chart IS the CSI driver for every stateful workload, and chart minors have shipped storage-engine behaviour changes                                                                         | [ADR-007](ADR-007-longhorn.md)                                                                                                                       |
+
+The Talos provider case is the one to remember. Plan and static checks never apply a
+machine config to a node, so **no CI gate can catch that class of change**. Green CI
+proved nothing. A guard is the only control that works.
+
+Kubernetes carries a separate constraint: the version pin is capped below 1.38 until
+Talos 1.15 is pinned, because the Talos 1.14 support matrix does not allow K8s 1.38.
+
+### Decision
+
+Four `packageRules` entries set `automerge: false` for those dependencies, and one
+entry caps the Kubernetes version. Every guard rule is declared **after** the
+`automerge: true` rules, because Renovate applies matching rules in order and the
+last match wins. Moving a guard above an automerge rule silently disables it.
+
+Renovate does not manage the vendored Gateway API CRDs: a version bump without
+re-downloading the upstream bundle would state something untrue.
+
+### Consequences
+
+This amendment records the guard rules outside `renovate.json5` on purpose.
+Renovate's config migration (PR 164) rewrites that file with **every comment
+removed**, so in-file rationale does not survive a migration. This section is the
+durable record of why each guard exists.
+
+The migration also deletes the `requiredStatusChecks` key, which Renovate 44
+deprecated. Nothing enforces it now: Renovate waits for every status on the branch to
+be green on its own. The `.gitea/workflows/tofu-lockfile.yaml` workflow therefore
+carries no `on.paths` filter, so it always posts its `lockfile` status and a PR is
+never stuck on a check that never appears. The `fry` review tool keeps the same list
+independently, so a PR whose lockfile job never posted still reads as `REVIEW`
+rather than green.
+
+### Follow-ups
+
+- `argocd.managerFilePatterns` points at `kubernetes/infrastructure/private/apps/`.
+  That path is `export-ignore` on the public mirror, so on GitHub the argocd manager
+  matches zero files and the cert-manager and Longhorn chart pins go unmanaged there.
+  Known gap, not caused by the migration.
+
 ## Consequences
 
 **Positive:**
@@ -80,3 +134,6 @@ Renovate PRs are the trigger for [n8n](https://n8n.io/) + [Ollama](https://ollam
 - During active upstream release periods Renovate can open more PRs than are comfortable to review at once. Grouping rules and scheduled windows reduce volume, but some noise is inherent. The Dependency Dashboard still beats per-notification email floods.
 - Automerge depends on CI actually catching regressions. A CI suite with meaningful gaps means automerge silently passes breaking changes, so CI quality is a prerequisite for automerge to be safe.
 - If the self-hosted runner is unavailable, Renovate jobs queue or fail. Missed runs delay updates but break nothing. `workflow_dispatch` allows a manual trigger when a specific update is needed immediately.
+- Renovate's config migration deletes every comment in `renovate.json5`. Guard
+  rationale must live in this ADR rather than in the config file, or it is lost on
+  the next migration.

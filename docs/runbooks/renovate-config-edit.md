@@ -2,6 +2,11 @@
 
 Validate and ship changes to `renovate.json5` (and triage the PRs it raises).
 
+Guard rules, and the incident behind each one, are recorded in
+[ADR-004](../decisions/ADR-004-renovate.md). They are not repeated here:
+Renovate's config migration deletes every comment in `renovate.json5`, so
+anything written in that file is lost the next time the bot rewrites it.
+
 ## Prerequisites
 
 - Node.js **>= 24.11.0** (Renovate 44 hard-requires `^24.11.0`; node 22/24.0
@@ -60,6 +65,10 @@ RENOVATE_CONFIG_FILE=renovate.json5 \
   `"automerge": false`, `"prPriority": 10`,
   `"labels": ["renovate", "cluster-upgrade"]`. It must stay the LAST rule (or
   at least after the automerge rules) so `automerge: false` wins.
+- The comment in that last rule explains why. Renovate's config migration
+  deletes it, so the same rationale now lives in
+  [ADR-004](../decisions/ADR-004-renovate.md) under "Automerge Guards and the
+  Config Migration". Read that before reordering or adding a guard.
 
 ## 2. Ship
 
@@ -72,6 +81,12 @@ Normal PR flow (leela/fry). Do not merge the config PR and a
 `cluster-upgrade` PR in the same batch if you want to review lookups first.
 
 ## 3. Triage Renovate PRs
+
+The config-migration PR ("chore(config): migrate Renovate config") is special:
+it rewrites the whole file in single quotes with every comment stripped, and
+drops the deprecated `requiredStatusChecks` key. It changes no guard rule.
+Merge it once the tooling can read the result; the rationale it deletes already
+lives in [ADR-004](../decisions/ADR-004-renovate.md).
 
 - **`cluster-upgrade` label** (Talos/K8s): never automerged by design.
   Follow `docs/runbooks/talos-k8s-upgrade.md`: maintenance window, etcd
