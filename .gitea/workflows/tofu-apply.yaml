@@ -198,6 +198,9 @@ jobs:
             # stack run apply --out-dir does NOT restrict unit discovery.
             # Pre-check every generated unit has a plan binary, or a unit
             # missing from the artifact would plan+apply fresh.
+            # Defense in depth: every unit source points at catalogs/, so the
+            # cache never holds a terragrunt.hcl today. The exclusion keeps that
+            # invariant enforced, matching scripts/check_provider_locks.py.
             terragrunt stack generate
             missing=0
             while IFS= read -r unit_hcl; do
@@ -208,7 +211,7 @@ jobs:
                 echo "::error::Missing plan binary for unit $rel in stack $name"
                 missing=1
               fi
-            done < <(find "$GITHUB_WORKSPACE/$stack/.terragrunt-stack" -name terragrunt.hcl -type f)
+            done < <(find "$GITHUB_WORKSPACE/$stack/.terragrunt-stack" -name terragrunt.hcl -not -path '*/.terragrunt-cache*' -type f)
             if [ "$missing" -ne 0 ]; then
               echo "::error::Stack $name: plan artifact incomplete, refusing to apply"
               printf '%s\n' "$name" >> "$GITHUB_WORKSPACE/failed-stacks.txt"
