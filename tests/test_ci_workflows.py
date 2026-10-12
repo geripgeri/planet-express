@@ -1,6 +1,9 @@
 import pathlib
 import re
 import subprocess
+import sys
+
+import pytest
 
 WORKFLOW_DIR = pathlib.Path(".gitea/workflows")
 SOPS_URL = re.compile(
@@ -190,3 +193,30 @@ def test_apply_unit_find_ignores_generated_units(tmp_path):
         ".terragrunt-stack/garage/k8s-backup/terragrunt.hcl",
         ".terragrunt-stack/proxmox/talos-vms/terragrunt.hcl",
     ]
+
+
+def test_find_in_workflow_raises_when_no_line_matches():
+    """A needle no find command carries must fail loudly, not return None."""
+    with pytest.raises(AssertionError, match="no find command for 'not-a-needle'"):
+        _find_in_workflow("tofu-plan.yaml", "not-a-needle")
+
+
+def test_find_in_workflow_raises_for_unknown_workflow_name():
+    """The reader must not swallow a missing workflow file as an empty result."""
+    with pytest.raises(FileNotFoundError):
+        _find_in_workflow("tofu-does-not-exist.yaml", "find ")
+
+
+def test_plan_find_cmd_raises_when_workflow_has_no_discovery_find(
+    monkeypatch, tmp_path
+):
+    """If tofu-plan stops discovering stacks, the guard test must fail.
+
+    Silence here would let the cache exclusion be dropped from the workflow
+    while the fixture tests above still pass against a stale command.
+    """
+    (tmp_path / "tofu-plan.yaml").write_text("name: Tofu Plan\njobs: {}\n")
+    monkeypatch.setattr(sys.modules[__name__], "WORKFLOW_DIR", tmp_path)
+
+    with pytest.raises(AssertionError, match="plan discovery find not found"):
+        _plan_find_cmd()
