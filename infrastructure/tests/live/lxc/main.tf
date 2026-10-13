@@ -46,9 +46,21 @@ variable "pm_bridge" {
 }
 
 variable "lxc_ostemplate" {
-  description = "Volume path of the Debian LXC template. Mirrors the Renovate-managed pin in ansible/roles/proxmox_base/defaults/main.yaml; update together."
+  description = "Volume path of the Debian LXC template. Null uses the Renovate-managed pin in ansible/roles/proxmox_base/defaults/main.yaml; set only to test another template."
   type        = string
-  default     = "local:vztmpl/debian-12-standard_12.12-1_amd64.tar.zst"
+  default     = null
+}
+
+locals {
+  # Single source of truth: the Renovate-managed Ansible pin, read the same way
+  # infrastructure/units/public/proxmox/base.hcl reads it for every unit. A
+  # copy here drifted once already (12.7 vs 12.12) and Renovate cannot see it.
+  ansible_defaults = yamldecode(file("../../../../ansible/roles/proxmox_base/defaults/main.yaml"))
+
+  ostemplate = coalesce(
+    var.lxc_ostemplate,
+    "local:vztmpl/${local.ansible_defaults.proxmox_base_pveam_template}",
+  )
 }
 
 provider "proxmox" {
@@ -85,7 +97,7 @@ module "under_test" {
 
   container_details = {
     target_node     = var.pm_target_node
-    ostemplate      = var.lxc_ostemplate
+    ostemplate      = local.ostemplate
     storage         = "local-lvm"
     nameserver      = "192.0.2.53"
     unprivileged    = true

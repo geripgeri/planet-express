@@ -135,10 +135,6 @@ vmid/name/uptime/node/type shape as `/cluster/resources`. Two PVE details:
 - The live VM fixture pins a static MAC (`bc:24:11:2a:3b:4c`). A leaked
   vmid-5901 guest can ARP-conflict until the sweep removes it (≤6h
   window).
-- The `lxc_ostemplate` default in the live wrappers duplicates the
-  Renovate-managed pin in `ansible/roles/proxmox_base/defaults/main.yaml`.
-  The wrapper default previously diverged from that pin (12.7 vs 12.12). Update
-  them together; Renovate does not know about the wrapper.
 
 ## CI plan identity (first-time host apply)
 
