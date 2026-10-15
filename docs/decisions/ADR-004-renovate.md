@@ -18,7 +18,7 @@ The private Gitea instance is on a Local Area Network (LAN) and is not reachable
 
 We will deploy Renovate as a scheduled Gitea Actions workflow on a self-hosted runner. Updates are discovered nightly and opened as PRs against the private Gitea repository. Minor and patch updates automerge when CI passes; major version bumps require manual review.
 
-Core `renovate.json`:
+Core `renovate.json5`:
 
 ```json
 {
@@ -51,7 +51,7 @@ jobs:
       - name: Run Renovate
         uses: renovatebot/github-action@v40
         with:
-          configurationFile: renovate.json
+          configurationFile: renovate.json5
           token: ${{ secrets.RENOVATE_TOKEN }}
         env:
           RENOVATE_PLATFORM: gitea

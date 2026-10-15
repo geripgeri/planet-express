@@ -96,12 +96,12 @@
 **Rule DEP-01: Deploy Renovate as a nightly scheduled Gitea Actions workflow on a self-hosted runner.** **Implementation:**
 
 - Schedule: `cron: '0 3 * * *'` plus `workflow_dispatch` for on-demand runs
-- Config file: `renovate.json` at repo root with `argocd`, `helm-values` and `terraform` managers enabled
+- Config file: `renovate.json5` at repo root with `argocd`, `helm-values` and `terraform` managers enabled
 - Runner: self-hosted, the same runner registered for integration tests
 
 **Rule DEP-02: Automerge minor and patch updates; require manual review for major bumps.** **Implementation:**
 
-- `renovate.json` extends `":automergeMinor"` and `"config:recommended"`
+- `renovate.json5` extends `":automergeMinor"` and `"config:recommended"`
 - Major bumps open a PR and are blocked from automerge; changelog review is expected before merge
 - Cilium chart bumps (Gateway API behaviour can change between minor versions) should include changelog review even for minor updates
 
