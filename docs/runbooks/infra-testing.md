@@ -93,10 +93,12 @@ vmid/name/uptime/node/type shape as `/cluster/resources`. Two PVE details:
   outside `ci-tests` is never swept. telmate never places a created guest
   into a pool, so the live harnesses
   (`infrastructure/tests/live/{vm,lxc}/main.tf`) enrol theirs with a
-  `POST /pools/ci-tests` right after apply. That POST needs
-  `Pool.Allocate` on `/pool/ci-tests` (add it to the ci-runner role, step
-  3\) plus `VM.Allocate` on the guest's vmid, which the runner already
-  holds from creating it.
+  `PUT /pools/ci-tests` right after apply, with the plain VMID in `vms`
+  (format `pve-vmid-list`, no `lxc:`/`qemu:` prefix). PVE implements no
+  `POST` on `/pools/{poolid}` (only `GET`, `PUT`, `DELETE`); that POST
+  returns the same 501 a masked permission failure does, so it hides the
+  cause. The PUT needs `Pool.Allocate` on `/pool/ci-tests` (step 3) plus
+  `VM.Allocate` on the guest's vmid, which the runner already holds.
 
 ## One-time self-hosted runner setup checklist
 
@@ -116,9 +118,10 @@ vmid/name/uptime/node/type shape as `/cluster/resources`. Two PVE details:
    `Pool.Audit` on `/pool/ci-tests` to that role (`Pool.Allocate` covers
    pool create/edit/delete only, so it does not help the read). Assign
    `Pool.Allocate` on the same path as well: the harnesses enrol each new
-   guest with a `POST /pools/ci-tests`, which is the write `Pool.Allocate`
-   grants. Both privileges put every live-tier guest (fresh and leftover)
-   in the pool, where the sweep sees it.
+   guest with a `PUT /pools/ci-tests` (the write `Pool.Allocate` grants;
+   no `POST` exists on `/pools/{poolid}`, see above). Both privileges put
+   every live-tier guest (fresh and leftover) in the pool, where the
+   sweep sees it.
 4. Age: generate a dedicated keypair; add its public key to the
    recipients in `.sops.yaml` creation rules; re-encrypt
    `infrastructure/secrets.yaml` (sops rotate -i -r).

@@ -47,6 +47,14 @@ ci-runner@pve API user scoped to a ci-tests pool, Gitea concurrency group
 serializing live runs, nightly orphan sweep
 (scripts/ci_sweep_test_guests.py).
 
+Provider versions are pinned once, in the catalogs. Each live harness
+declares sources without versions, so a Renovate catalog bump reaches
+the harness without a duplicate pin. One such duplicate drifted (a
+harness pinned random 3.9.0 against the catalog's 3.9.1), and the
+merged exact constraints made `tofu init` unsolvable. The harnesses
+therefore carry a `tflint-ignore: terraform_required_providers`
+directive on the `required_providers` block.
+
 Terratest remains the escape hatch for future multi-step suites, for example
 a mini-Talos bootstrap drill. Such a suite reuses the same pool, vmid, and
 secrets contracts, and existing HCL tests are not converted.

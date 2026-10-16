@@ -5,15 +5,20 @@
 terraform {
   required_version = ">= 1.12.5"
 
+  # No version pin here: the catalog
+  # (infrastructure/catalogs/public/lxc/main.tf) is the tracked pin source,
+  # and init resolves one version for the whole tree. The vm harness
+  # drifted once this way (random 3.9.0 vs the catalog's 3.9.1) and broke
+  # the live run; the ignore below silences the rule for the same reason.
+  # tflint-ignore: terraform_required_providers
   required_providers {
+    # tflint-ignore: terraform_required_providers
     proxmox = {
       source = "telmate/proxmox"
-      # Version tracked here: see infrastructure/catalogs/public/lxc/main.tf
-      version = "3.0.2-rc10"
     }
+    # tflint-ignore: terraform_required_providers
     null = {
-      source  = "opentofu/null"
-      version = "3.3.2"
+      source = "opentofu/null"
     }
   }
 }
@@ -107,11 +112,12 @@ module "under_test" {
   }
 }
 
-# The sweep backstop reads ONLY /pools/ci-tests members; telmate never places a
-# created guest into a pool, so a leftover would stay invisible to it forever.
-# Enrol the guest as soon as it exists so a missed teardown is swept within 6h.
-# ci-runner@pve needs Pool.Allocate on /pool/ci-tests for the POST (and
-# VM.Allocate on the vmid, which it already holds from creating the guest).
+# The sweep reads ONLY /pools/ci-tests members, and telmate never places a
+# created guest into a pool, so a missed teardown would stay invisible forever.
+# Enrol the guest on create. PVE implements no POST on /pools/{poolid};
+# the write there is a PUT whose vms parameter takes plain VMIDs.
+# Pool.Allocate on /pool/ci-tests covers it, and the token already holds
+# VM.Allocate from creating the guest.
 resource "null_resource" "enroll_in_ci_tests_pool" {
   triggers = {
     vmid = module.under_test.vmids["tftest-live-lxc"]
@@ -124,9 +130,9 @@ resource "null_resource" "enroll_in_ci_tests_pool" {
       base, vmid, tid, sec = sys.argv[1:]
       req = urllib.request.Request(
           base.rstrip("/") + "/api2/json/pools/ci-tests",
-          data=urllib.parse.urlencode({"vms": "lxc:" + vmid}).encode(),
+          data=urllib.parse.urlencode({"vms": vmid}).encode(),
           headers={"Authorization": "PVEAPIToken=" + tid + "=" + sec},
-          method="POST",
+          method="PUT",
       )
       with urllib.request.urlopen(req, timeout=30, context=ssl._create_unverified_context()) as resp:
           resp.read()
