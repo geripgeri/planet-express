@@ -287,8 +287,8 @@
 **Rule ALT-02: Store signal-cli-rest-api registration data on a `longhorn` (3-replica) PVC.** **Implementation:**
 
 - StorageClass: `longhorn` (3 replicas), the only observability component that must not use `longhorn-single-replica`
-- One-time registration through the REST API (`/v1/register/<number>` then `/v1/register/<number>/verify/<code>`), no `kubectl exec` into the container required; documented in the Phase 6 runbook
-- TODO: document the recovery procedure if the PVC is lost
+- One-time registration through the REST API (`/v1/register/<number>` then `/v1/register/<number>/verify/<code>`), no `kubectl exec` into the container required; documented in the [signal-cli recovery runbook](runbooks/signal-cli-recovery.md)
+- Recovery when the PVC is lost: re-register is the primary path, Longhorn restore is the fallback; see the [signal-cli recovery runbook](runbooks/signal-cli-recovery.md)
 
 ### [ADR-013](decisions/ADR-013-cilium-network-policy.md): Cilium NetworkPolicy & Trivy
 
