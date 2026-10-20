@@ -10,7 +10,7 @@
 
 - No manual clicks in the Proxmox UI, no `kubectl apply` outside bootstrap; all changes go through OpenTofu, Ansible or ArgoCD
 - Definition of done for any phase: a stranger clones the repo, follows the runbook and reproduces the result
-- TODO: add a CI gate that fails if a resource in `infrastructure/` has no matching OpenTofu unit
+- Enforced by the `unit-coverage` pre-commit hook (`scripts/check_unit_coverage.py`): every `.tf` file under `infrastructure/` sits in a catalog that a unit references, or in the exempt live-test harness. A catalog with no consuming unit also fails; recorded exemptions live in `scripts/check_unit_coverage.py` (currently only `adguard-config`, pending the DNS-02 gap)
 
 **Rule IaC-02: Write ADRs at decision time, not after.** **Implementation:**
 

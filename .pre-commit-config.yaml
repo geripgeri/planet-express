@@ -121,3 +121,10 @@ repos:
       files: ^infrastructure/
       pass_filenames: false
       verbose: true
+    - id: unit-coverage
+      name: Check that every infrastructure resource has a unit
+      entry: uv run scripts/check_unit_coverage.py
+      language: system
+      files: ^infrastructure/(units|catalogs)/|^scripts/check_unit_coverage\.py$|^tests/test_check_unit_coverage\.py$
+      pass_filenames: false
+      verbose: true
