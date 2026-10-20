@@ -220,3 +220,12 @@ def test_plan_find_cmd_raises_when_workflow_has_no_discovery_find(
 
     with pytest.raises(AssertionError, match="plan discovery find not found"):
         _plan_find_cmd()
+
+
+def test_tofu_static_runs_unit_coverage_gate():
+    """The unit coverage gate must run in CI, not only on local commits."""
+    text = (WORKFLOW_DIR / "tofu-static.yaml").read_text()
+    assert "scripts/check_unit_coverage.py" in text, (
+        "tofu-static.yaml: unit coverage gate step missing; every .tf tree "
+        "must map to a unit on the hosted runner too"
+    )

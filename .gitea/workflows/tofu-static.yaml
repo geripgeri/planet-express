@@ -5,11 +5,15 @@ on:
     branches: [ main ]
     paths:
       - 'infrastructure/**'
+      - 'scripts/check_unit_coverage.py'
+      - 'tests/test_check_unit_coverage.py'
       - '.gitea/workflows/tofu-static.yaml'
   pull_request:
     branches: [ main ]
     paths:
       - 'infrastructure/**'
+      - 'scripts/check_unit_coverage.py'
+      - 'tests/test_check_unit_coverage.py'
       - '.gitea/workflows/tofu-static.yaml'
 
 permissions:
@@ -37,6 +41,9 @@ jobs:
 
       - name: Format check
         run: tofu fmt -check -recursive infrastructure/catalogs
+
+      - name: Unit coverage gate
+        run: python3 scripts/check_unit_coverage.py
 
       - name: Init, validate and lint each catalog
         run: |
