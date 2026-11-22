@@ -342,6 +342,6 @@
       ],
     },
   ],
-  prHourlyLimit: 2,
+  prHourlyLimit: 0,
   prConcurrentLimit: 5,
 }
