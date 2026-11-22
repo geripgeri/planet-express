@@ -1,7 +1,8 @@
 # Runbook: Talos + Kubernetes Upgrade
 
 Upgrade the Talos cluster (Talos minor/patch + Kubernetes minor). Follow top to
-bottom. Current example: v1.12.4 → v1.14.0, Kubernetes 1.35.8 → 1.37.0.
+bottom. Current cluster Talos version: v1.14.6. The worked example below uses
+v1.12.4 → v1.14.0, Kubernetes 1.35.8 → 1.37.0.
 
 ## 0. Control-plane sizing requirement
 
