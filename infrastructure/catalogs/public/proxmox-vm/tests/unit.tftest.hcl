@@ -64,3 +64,14 @@ run "ip_output_contains_every_input_key" {
     error_message = "ip_addresses output must contain an entry for every vm key"
   }
 }
+
+run "vm_power_state_pinned_running" {
+  command = plan
+
+  # rc10 deprecates vm_state in favour of power_state. Assert the supported
+  # argument so a revert brings the deprecation warning back.
+  assert {
+    condition     = proxmox_vm_qemu.this["tftest-unit-vm"].power_state == "running"
+    error_message = "power_state must be pinned to running on every VM"
+  }
+}
