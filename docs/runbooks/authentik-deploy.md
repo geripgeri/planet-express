@@ -261,4 +261,48 @@ the first write-heavy migration activity settles.
 | Chart pods crash on DB auth                    | Confirm bootstrap fill ran once, `db-secret` and `config-secret` passwords match (rerun script)          |
 | OIDC redirect mismatch                         | Provider `redirect_uris` in the authentik unit vs `https://argocd.example.com/callback`; re-apply step 6 |
 | Provider apply cannot reach `auth.example.com` | HTTPRoute/DNS from steps 1 and 4 not ready; provider only runs after the stack is live                   |
-| Barman upload errors in CNPG logs              | `k8s-backup` bucket exists, `authentik-backup` key is valid, endpoint reachable from the cluster         |
+| Barman exits 2 on WAL archive                  | `endpointURL` uses `http://<garage-host>:3900`, with no `/24` suffix                                     |
+| Barman returns 400 on `HeadBucket`             | Set `AWS_DEFAULT_REGION=garage` in `spec.env`                                                            |
+| CNPG reports `Not enough disk space`           | Grow the PVC to match `spec.storage.size`, then recreate the instance pod (see below)                    |
+
+### PGDATA volume full and WAL archiving failing
+
+A wrong `endpointURL` or a missing S3 region stops WAL uploads. Segments stay
+in `pg_wal` until the volume fills. CNPG then refuses to start Postgres and
+sets the cluster phase to `Not enough disk space`. Server and worker pods
+crash because the database is down.
+
+Check the archive error:
+
+```bash
+kubectl -n authentik get cluster authentik -o jsonpath='{.status.conditions}' | jq .
+kubectl -n authentik logs authentik-2 -c postgres --tail=80 2>&1 | grep -iE 'archive|wal|error'
+```
+
+Barman exits 2 on a connection error when `endpointURL` contains the `/24`
+suffix from `network_config.garage_lxc.ip`. Use `http://<garage-host>:3900`.
+`infrastructure/root.hcl:6` shows how to strip the suffix.
+
+Barman returns 400 on `HeadBucket` when boto3 signs with its default region.
+Set `AWS_DEFAULT_REGION=garage` in `spec.env` on the Cluster. Recreate the
+instance pods so the new env reaches the archiver.
+
+CNPG can leave the PVC at its old size after you raise `spec.storage.size`.
+Patch the request and watch the capacity:
+
+```bash
+kubectl -n authentik patch pvc authentik-2 \
+  -p '{"spec":{"resources":{"requests":{"storage":"20Gi"}}}}'
+kubectl -n authentik get pvc authentik-2 -w
+```
+
+If the capacity stays at the old size, recreate the pod to finish the
+filesystem resize:
+
+```bash
+kubectl -n authentik delete pod authentik-2
+```
+
+A recreated replica replays archived WALs before it becomes Ready. Its startup
+probe returns HTTP 500 and Postgres logs `57P03` during replay. Wait for
+`Ready 2` and `Cluster in healthy state`. Do not delete the replica PVC.
