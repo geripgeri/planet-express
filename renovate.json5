@@ -255,6 +255,15 @@
       automerge: true,
     },
     {
+      matchDepNames: [
+        'astral-sh/uv',
+      ],
+      matchUpdateTypes: [
+        'patch',
+      ],
+      automerge: true,
+    },
+    {
       matchUpdateTypes: [
         'digest',
         'lockFileMaintenance',
