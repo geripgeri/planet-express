@@ -3,5 +3,8 @@ kind: Kustomization
 namespace: authentik
 resources:
   - namespace.yaml
+  - cnpg-rbac.yaml
 generators:
   - ksops.yaml
+patches:
+  - path: cnpg-sa-patch.yaml

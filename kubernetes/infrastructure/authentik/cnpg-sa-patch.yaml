@@ -1,0 +1,9 @@
+# Applied to the Cluster produced by the KSOPS generator. This keeps the
+# SOPS-encrypted cluster.yaml untouched.
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: authentik
+  namespace: authentik
+spec:
+  serviceAccountName: authentik-cnpg

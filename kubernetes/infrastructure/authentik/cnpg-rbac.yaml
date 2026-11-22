@@ -1,0 +1,163 @@
+# The Authentik Helm chart owns a ServiceAccount, Role and RoleBinding named
+# "authentik". CNPG names its instance ServiceAccount after the Cluster, which
+# collides with that name. The chart Role does not grant lease or CNPG custom
+# resource access, so the instance manager cannot renew the primary lease.
+# This dedicated ServiceAccount avoids the collision. Its rules mirror the
+# Role that CNPG generates for a cluster named "authentik".
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: authentik-cnpg
+  namespace: authentik
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: authentik-cnpg
+  namespace: authentik
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+    verbs:
+      - get
+      - watch
+    resourceNames:
+      - authentik
+      - cnpg-default-monitoring
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+    verbs:
+      - get
+      - watch
+    resourceNames:
+      - authentik-app
+      - authentik-backup
+      - authentik-ca
+      - authentik-client-ca
+      - authentik-config
+      - authentik-db-auth
+      - authentik-replication
+      - authentik-server
+      - authentik-server-ca
+      - authentik-superuser
+  - apiGroups:
+      - postgresql.cnpg.io
+    resources:
+      - clusters
+    verbs:
+      - get
+      - list
+      - watch
+    resourceNames:
+      - authentik
+  - apiGroups:
+      - postgresql.cnpg.io
+    resources:
+      - clusters/status
+    verbs:
+      - get
+      - patch
+      - update
+      - watch
+    resourceNames:
+      - authentik
+  - apiGroups:
+      - postgresql.cnpg.io
+    resources:
+      - backups
+    verbs:
+      - list
+      - get
+      - delete
+  - apiGroups:
+      - postgresql.cnpg.io
+    resources:
+      - backups/status
+    verbs:
+      - get
+      - patch
+      - update
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - create
+      - patch
+  - apiGroups:
+      - postgresql.cnpg.io
+    resources:
+      - databases
+      - publications
+      - subscriptions
+      - databaseroles
+    verbs:
+      - get
+      - update
+      - list
+      - watch
+  - apiGroups:
+      - postgresql.cnpg.io
+    resources:
+      - databases/status
+      - publications/status
+      - subscriptions/status
+      - databaseroles/status
+    verbs:
+      - get
+      - patch
+      - update
+  - apiGroups:
+      - coordination.k8s.io
+    resources:
+      - leases
+    verbs:
+      - get
+      - update
+    resourceNames:
+      - authentik
+  - apiGroups:
+      - postgresql.cnpg.io
+    resources:
+      - failoverquorums
+    verbs:
+      - get
+      - list
+      - watch
+    resourceNames:
+      - authentik
+  - apiGroups:
+      - postgresql.cnpg.io
+    resources:
+      - failoverquorums/status
+    verbs:
+      - get
+      - patch
+      - update
+      - watch
+    resourceNames:
+      - authentik
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: authentik-cnpg
+  namespace: authentik
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: authentik-cnpg
+subjects:
+  - kind: ServiceAccount
+    name: authentik-cnpg
+    namespace: authentik
