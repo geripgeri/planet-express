@@ -19,7 +19,8 @@ data "authentik_flow" "explicit_consent" {
 }
 
 data "authentik_flow" "invalidation" {
-  slug = "default-provider-invalidation"
+  # Authentik's default provider logout flow (blueprint/2026.8.x).
+  slug = "default-provider-invalidation-flow"
 }
 
 resource "authentik_provider_oauth2" "argocd" {
