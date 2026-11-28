@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Run Renovate Docker image
-        uses: docker://renovate/renovate:44
+        uses: docker://renovate/renovate:45
         env:
           # Token stored in repository secrets; must have permissions:
           # write:issue
