@@ -2,8 +2,10 @@ terraform {
   required_version = ">= 1.12.5"
   required_providers {
     garage = {
-      source  = "schwitzd/garage"
-      version = "1.2.2"
+      # Fork of schwitzd/garage: SDK v2.3.0 and tolerant version detection
+      # are required for Garage >= 2.2/2.5. See ADR-010 amendment 2026-11-28.
+      source  = "geripgeri/garage"
+      version = "1.2.3"
     }
   }
 }

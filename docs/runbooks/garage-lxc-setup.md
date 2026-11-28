@@ -63,7 +63,7 @@ From `ansible/` on the host:
 ansible-playbook playbooks/bootstrap.yaml
 ```
 
-The play targets the `lxc` group: pinned Garage 2.3.0 binary,
+The play targets the `lxc` group: pinned Garage 2.5.0 binary,
 checksum-verified; `/etc/garage.toml` written from the vault; `garage` systemd
 service; smoke-check `garage node id`. To run only this step later:
 
@@ -105,9 +105,31 @@ terragrunt stack run apply
 The garage stack (`infrastructure/stacks/public/garage/`) applies two units:
 `tofu-state` (state bucket plus
 `tofu-state` key) and `k8s-backup` (application backup bucket plus
-`authentik-backup` key), both on the `schwitzd/garage` provider with the admin
-token from step 1, with separate bucket bindings. The state key stays
-available through the `tofu-state` unit output.
+`authentik-backup` key), both on the pinned `geripgeri/garage` fork provider
+with the admin token from step 1, with separate bucket bindings. The state key
+stays available through the `tofu-state` unit output.
+
+### One-time provider source migration (2026-11-28)
+
+The switch from `schwitzd/garage` to `geripgeri/garage` changed the provider
+address in state. On an existing setup, run this on the host (it holds the
+sops age key) before the first `plan` or `apply` with the new catalog. A fresh
+setup that never applied these units skips this step. Do not apply before the
+migration: OpenTofu would plan to destroy and recreate the buckets and keys.
+
+```bash
+for unit in tofu-state k8s-backup; do
+  cd "infrastructure/units/public/garage/$unit"
+  terragrunt init
+  terragrunt run -- state replace-provider -auto-approve \
+    registry.opentofu.org/schwitzd/garage \
+    registry.opentofu.org/geripgeri/garage
+  cd -
+done
+```
+
+Both units must show zero changes in `terragrunt stack run plan` afterwards.
+Keep the pre-migration state backup until that plan is clean.
 
 Store the state unit's `access_key_id` and `secret_access_key` in
 `infrastructure/secrets.yaml` as `garage.s3.access_key_id` and

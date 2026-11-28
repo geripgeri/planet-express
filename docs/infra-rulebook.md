@@ -241,7 +241,7 @@
 - Garage LXC is a hard dependency: its own bootstrap uses local state or a separately maintained state file
 - The `garage-lxc` unit (`infrastructure/units/public/proxmox/garage-lxc/`) provisions it via the reusable `lxc` module (`infrastructure/catalogs/public/lxc/`); its static IP lives in `secrets.yaml` under `network_config.garage_lxc` because LXC resources expose no provider-discovered address
 - The `garage` Ansible role (`ansible/roles/garage/`), applied by `bootstrap.yaml` to the `lxc` inventory group, installs and configures the guest; `docs/runbooks/garage-lxc-setup.md` covers vault creation, the one-time cluster layout bootstrap and the state bucket/key provisioning flow
-- The single `garage/tofu-state` unit (stack `infrastructure/stacks/public/garage/`) provisions the state bucket and access key through the `schwitzd/garage` provider; `garage.admin_token` in `secrets.yaml` is the shared admin credential
+- The single `garage/tofu-state` unit (stack `infrastructure/stacks/public/garage/`) provisions the state bucket and access key through the pinned `geripgeri/garage` fork provider ([ADR-010](decisions/ADR-010-garage.md), 2026-11-28 amendment); `garage.admin_token` in `secrets.yaml` is the shared admin credential
 - Garage is monitored and backed up as part of the LXC operational runbook
 
 **Rule OBJ-02: Compensate for missing Garage bucket versioning with periodic rclone snapshots.** **Source:** also [ADR-015](decisions/ADR-015-disaster-recovery.md) **Implementation:**

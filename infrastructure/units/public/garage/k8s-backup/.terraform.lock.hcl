@@ -1,26 +1,33 @@
 # This file is maintained automatically by "tofu init".
 # Manual edits may be lost in future updates.
 
-provider "registry.opentofu.org/schwitzd/garage" {
-  version     = "1.2.2"
-  constraints = "1.2.2"
+provider "registry.opentofu.org/geripgeri/garage" {
+  version     = "1.2.3"
+  constraints = "1.2.3"
   hashes = [
-    "h1:9e4KUNMk6rrGYlEAgm9YSNTsnPrYMnN5d+WpH/4tRls=",
-    "h1:PSG3ffGz8Re+djdGPY4ZQOHqRlUfBBW+mgNZaWQSRUY=",
-    "h1:SI2Kbgy2GmjhLb+zlhx5+xIpmCAymopIvg6oxgdSg58=",
-    "h1:Vo4ioTM23l9f/D+dJwAzWLDUM+088DYKaprYY+QFFGU=",
-    "h1:cGqgmX76Qt7rKau0vbq5cmtNrrMhdWUuQCwq2/ZfLDI=",
-    "h1:uTYR/Wx65PMFRI0wQFFAopcuxPwCFTJ3Vnx01q9NSs4=",
-    "h1:uWyvs5RBG83M+tFBNmYlyPNKT8us0XC/MO5Yy+W/c/I=",
-    "h1:z06bpzkTJF40C09HDkLBf+vgV62lthU9O0nVCj5HcjI=",
-    "zh:328df9b514661f088026ff6b34dbe157e2ef1a60328a754b3e46fc9c7ccc7dae",
-    "zh:62daa0dfd5fa2b31018596e55cc5365713e44b888eca20f22f9220d86d1c965a",
-    "zh:890df766e9b839623b1f0437355032a3c006226a6c200cd911e15ee1a9014e9f",
-    "zh:8ca58148a370914829d0ce2f9fab07f9c5ee3f35f03e632f3e93a175605306ef",
-    "zh:a1e2c46288f2f5b0ce5b834141d4a74af2dd97e4b5833b665903778c99989e01",
-    "zh:ad35cc50e952fb88f26a639de6942768c28a4d0295b049c1ddd46d351e1f804a",
-    "zh:c69e9d2bc83cb50d784e70109fc247d8695a28e7a55f136c67ae3d4e587a467c",
-    "zh:ea1d31de431c18bdabba812ba1054e3fe46c0ecb3f7cdb884061f20c0b1578cc",
-    "zh:ee821f221bc2c726fb345b720b5f3b21befa90b0f54596254311215d92452d86",
+    "h1:1BKnW/IZYoe6x0Rn8//qa2wDSQELTbn/ZAHW2eBoD3E=",
+    "h1:NApxL6zjeGVcZGA/hZZcJ5EguhqS641dOznqt+foyAM=",
+    "h1:aoGXnAHaibmPdu27JLyyvAMXz30oNSxSz2Fuv2GKlEE=",
+    "h1:efP7i2wqpICEjovL33icNwTBOwu9h3ZcOP9up3gY4hw=",
+    "h1:oRNvQMgis3VadOfkFfGnv1587Eps0JyvNJryfom9gWE=",
+    "h1:p4c0C9mbV+gvo338ggl4WaXIpg0DSo/ZzJzFc0tKTHg=",
+    "h1:uqjaVKGhQh48agJvw6rgtDDnUlokp6SbKjTJJmrzpyE=",
+    "h1:yJCJR93xqSih4lJSurEozJ3OUfokhIiVVgtHXuia0G0=",
+    "zh:13bab6299e314db1ede5500cd97073f5d099259b17dbd6d9830520011d988b45",
+    "zh:34d55fa645c73fecda02e8322c608ac573ee786ec21c223acccfa201e4a5ceb8",
+    "zh:47b8c9d1c2a4aab0d8083d854bb942d0d1ee165e045602b5ccb146c9613c4710",
+    "zh:4d77b2b3f66e180f568108b49f831b1a21d138da9bd386ca5ceda0d5f7db1d00",
+    "zh:747d54cfeac8c5fb8c81444895c320519b4e564db0227b8126a8672c89aecbe3",
+    "zh:a41f44362568ad885c227150777c606c835994f82b39206b38d8f3bd48a6f295",
+    "zh:ba9165849a3f3aa113866b04cd092906e398c7e22b2cfec1c1a9603323843fa1",
+    "zh:f4848af963b2ed281a9cfd88f98cdc8cbe243f72351ddc74d12822294417822c",
+    "zh:f569b65999264a9416862bca5cd2a6177d94ccb0424f3a4ef424428912b9cb3c",
+  ]
+}
+
+provider "registry.opentofu.org/schwitzd/garage" {
+  version = "1.2.3"
+  hashes = [
+    "h1:aoGXnAHaibmPdu27JLyyvAMXz30oNSxSz2Fuv2GKlEE=",
   ]
 }
